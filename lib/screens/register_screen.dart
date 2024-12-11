@@ -15,17 +15,27 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  String _selectedDepartment = '';
   bool _isLoading = false;
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
 
+  final List<String> _departments = [
+    'Satış / Pazarlama',
+    'Mühendislik Departmanı',
+    'Teknik Ekip',
+    'Muhasebe',
+    'İnsan Kaynakları',
+    'Yazılım / PR',
+  ];
+
   @override
   void dispose() {
     _nameController.dispose();
-    _emailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -33,15 +43,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedDepartment.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lütfen bir departman seçin')),
+      );
+      return;
+    }
 
     setState(() => _isLoading = true);
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      await authService.register(
+      await authService.registerWithUsername(
         name: _nameController.text.trim(),
-        email: _emailController.text.trim(),
+        username: _usernameController.text.trim(),
         password: _passwordController.text.trim(),
+        department: _selectedDepartment,
       );
       if (mounted) {
         Navigator.pop(context); // Return to login screen
@@ -83,17 +100,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 16),
                 CustomTextField(
-                  controller: _emailController,
-                  labelText: AppConstants.labelEmail,
-                  keyboardType: TextInputType.emailAddress,
+                  controller: _usernameController,
+                  labelText: 'Kullanıcı Adı',
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return AppConstants.errorRequiredField;
                     }
-                    if (!value.contains('@')) {
-                      return AppConstants.errorInvalidEmail;
+                    // Kullanıcı adı formatı kontrolü
+                    if (!RegExp(r'^[a-zA-Z0-9_.]+$').hasMatch(value)) {
+                      return 'Kullanıcı adı sadece harf, rakam, nokta ve alt çizgi içerebilir';
                     }
                     return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _selectedDepartment.isEmpty ? null : _selectedDepartment,
+                  decoration: const InputDecoration(
+                    labelText: 'Departman',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _departments.map((String department) {
+                    return DropdownMenuItem<String>(
+                      value: department,
+                      child: Text(department),
+                    );
+                  }).toList(),
+                  onChanged: (String? newValue) {
+                    setState(() {
+                      _selectedDepartment = newValue ?? '';
+                    });
                   },
                 ),
                 const SizedBox(height: 16),

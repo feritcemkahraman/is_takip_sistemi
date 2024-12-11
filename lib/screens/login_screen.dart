@@ -15,14 +15,14 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _isPasswordVisible = false;
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -34,8 +34,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      await authService.signIn(
-        email: _emailController.text.trim(),
+      await authService.signInWithUsername(
+        username: _usernameController.text.trim(),
         password: _passwordController.text.trim(),
       );
     } catch (e) {
@@ -61,6 +61,16 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
+                  'HAN Holding',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
                   AppConstants.appName,
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -70,15 +80,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 32),
                 CustomTextField(
-                  controller: _emailController,
-                  labelText: AppConstants.labelEmail,
-                  keyboardType: TextInputType.emailAddress,
+                  controller: _usernameController,
+                  labelText: 'Kullanıcı Adı',
+                  keyboardType: TextInputType.text,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return AppConstants.errorRequiredField;
-                    }
-                    if (!value.contains('@')) {
-                      return AppConstants.errorInvalidEmail;
                     }
                     return null;
                   },

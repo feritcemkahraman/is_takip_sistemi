@@ -31,9 +31,20 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   DateTime _dueDate = DateTime.now().add(const Duration(days: 1));
   bool _isLoading = false;
   List<UserModel> _employees = [];
+  List<UserModel> _filteredEmployees = [];
   UserModel? _selectedEmployee;
   List<File> _selectedFiles = [];
   String _selectedPriority = AppConstants.taskPriorityNormal;
+  String _selectedDepartment = '';
+
+  final List<String> _departments = [
+    'Satış / Pazarlama',
+    'Mühendislik Departmanı',
+    'Teknik Ekip',
+    'Muhasebe',
+    'İnsan Kaynakları',
+    'Yazılım / PR',
+  ];
 
   @override
   void initState() {
@@ -53,6 +64,25 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
     final snapshot = await _authService.getEmployees();
     setState(() {
       _employees = snapshot;
+      _filterEmployees();
+    });
+  }
+
+  void _filterEmployees() {
+    setState(() {
+      if (_selectedDepartment.isEmpty) {
+        _filteredEmployees = _employees;
+      } else {
+        _filteredEmployees = _employees
+            .where((employee) => employee.department == _selectedDepartment)
+            .toList();
+      }
+      // Seçili çalışanın departmanı değişirse, seçimi temizle
+      if (_selectedEmployee != null &&
+          _selectedEmployee!.department != _selectedDepartment) {
+        _selectedEmployee = null;
+        _assigneeController.clear();
+      }
     });
   }
 
@@ -198,6 +228,33 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                 },
               ),
               const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedDepartment.isEmpty ? null : _selectedDepartment,
+                decoration: const InputDecoration(
+                  labelText: 'Departman',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.business),
+                ),
+                items: _departments.map((String department) {
+                  return DropdownMenuItem<String>(
+                    value: department,
+                    child: Text(department),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _selectedDepartment = newValue ?? '';
+                    _filterEmployees();
+                  });
+                },
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Lütfen bir departman seçin';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
               TypeAheadFormField<UserModel>(
                 textFieldConfiguration: TextFieldConfiguration(
                   controller: _assigneeController,
@@ -206,11 +263,11 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.person_outline),
                   ),
+                  enabled: _selectedDepartment.isNotEmpty,
                 ),
                 suggestionsCallback: (pattern) {
-                  return _employees.where((employee) =>
-                    employee.name.toLowerCase().contains(pattern.toLowerCase()) ||
-                    employee.department.toLowerCase().contains(pattern.toLowerCase())
+                  return _filteredEmployees.where((employee) =>
+                    employee.name.toLowerCase().contains(pattern.toLowerCase())
                   ).toList();
                 },
                 itemBuilder: (context, employee) {
@@ -222,7 +279,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                 onSuggestionSelected: (employee) {
                   setState(() {
                     _selectedEmployee = employee;
-                    _assigneeController.text = '${employee.name} (${employee.department})';
+                    _assigneeController.text = employee.name;
                   });
                 },
                 validator: (value) {

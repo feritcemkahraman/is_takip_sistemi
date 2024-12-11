@@ -46,12 +46,27 @@ class AuthService {
     }
   }
 
-  // Giriş yap
-  Future<void> signIn({
-    required String email,
+  // Kullanıcı adı ile giriş yap
+  Future<void> signInWithUsername({
+    required String username,
     required String password,
   }) async {
     try {
+      // Kullanıcı adına göre kullanıcıyı bul
+      final QuerySnapshot userDoc = await _firestore
+          .collection(AppConstants.usersCollection)
+          .where('username', isEqualTo: username)
+          .limit(1)
+          .get();
+
+      if (userDoc.docs.isEmpty) {
+        throw AppConstants.errorUserNotFound;
+      }
+
+      // Kullanıcının email'ini al
+      final String email = userDoc.docs.first.get('email') as String;
+
+      // Firebase Auth ile giriş yap
       await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
@@ -66,53 +81,80 @@ class AuthService {
           case 'wrong-password':
             message = AppConstants.errorWrongPassword;
             break;
-          case 'invalid-email':
-            message = AppConstants.errorInvalidEmail;
-            break;
         }
+      } else if (e is String) {
+        message = e;
       }
       throw message;
     }
   }
 
-  // Kayıt ol
-  Future<void> register({
+  // Kayıt ol (kullanıcı adı ile)
+  Future<void> registerWithUsername({
     required String name,
-    required String email,
+    required String username,
     required String password,
-    String department = '',
+    required String department,
   }) async {
     try {
+      // Kullanıcı adının kullanılabilir olduğunu kontrol et
+      final bool isAvailable = await isUsernameAvailable(username);
+      if (!isAvailable) {
+        throw AppConstants.errorUsernameAlreadyInUse;
+      }
+
+      // İlk kullanıcı kontrolü
+      final bool isFirst = await isFirstUser();
+      print('İlk kullanıcı mı: $isFirst'); // Debug log
+
+      // Benzersiz bir email oluştur
+      final String email = '$username@hanholding.com';
+      print('Oluşturulan email: $email'); // Debug log
+
       // Kullanıcıyı Firebase Auth'a kaydet
       final UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // Kullanıcı bilgilerini Firestore'a kaydet
-      await _firestore.collection(AppConstants.usersCollection).doc(userCredential.user!.uid).set({
-        'name': name,
-        'email': email,
-        'department': department,
-        'role': AppConstants.roleUser,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      String message = AppConstants.errorUnknown;
-      if (e is FirebaseAuthException) {
-        switch (e.code) {
-          case 'email-already-in-use':
-            message = AppConstants.errorEmailAlreadyInUse;
-            break;
-          case 'invalid-email':
-            message = AppConstants.errorInvalidEmail;
-            break;
-          case 'weak-password':
-            message = AppConstants.errorWeakPassword;
-            break;
-        }
+      if (userCredential.user == null) {
+        throw 'Kullanıcı oluşturulamadı';
       }
-      throw message;
+
+      print('Firebase Auth kaydı başarılı. UID: ${userCredential.user?.uid}'); // Debug log
+
+      // Firestore'a kayıt
+      try {
+        print('Firestore kayıt işlemi başlıyor...'); // Debug log
+        
+        final userData = {
+          'name': name,
+          'username': username,
+          'email': email,
+          'department': department,
+          'role': isFirst ? AppConstants.roleAdmin : AppConstants.roleUser,
+          'createdAt': Timestamp.now(),
+          'isActive': true,
+        };
+        
+        print('Kaydedilecek kullanıcı verisi: $userData'); // Debug log
+        
+        await _firestore
+            .collection(AppConstants.usersCollection)
+            .doc(userCredential.user!.uid)
+            .set(userData);
+            
+        print('Firestore kaydı başarılı'); // Debug log
+        return;
+      } catch (firestoreError) {
+        print('Firestore hatası: $firestoreError');
+        // Firestore kaydı başarısız olursa kullanıcıyı sil
+        await userCredential.user?.delete();
+        throw 'Firestore kayıt hatası: $firestoreError';
+      }
+    } catch (e) {
+      print('Genel kayıt hatası: $e');
+      throw e.toString();
     }
   }
 
