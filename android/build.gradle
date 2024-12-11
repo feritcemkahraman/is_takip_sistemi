@@ -1,0 +1,79 @@
+buildscript {
+    ext {
+        kotlin_version = '1.9.0'
+        gradle_version = '8.1.0'
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath "com.android.tools.build:gradle:$gradle_version"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath 'com.google.gms:google-services:4.4.0'
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    configurations.all {
+        resolutionStrategy {
+            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.0'
+            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0'
+            force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.0'
+        }
+    }
+}
+
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            android {
+                compileSdkVersion 34
+                
+                if (project.name == 'app') {
+                    namespace "com.hanholding.is_takip_sistemi"
+                } else if (project.name == 'flutter_keyboard_visibility') {
+                    namespace "com.jrai.flutter_keyboard_visibility"
+                } else if (project.name == 'firebase_core') {
+                    namespace "io.flutter.plugins.firebase.core"
+                } else if (project.name == 'firebase_auth') {
+                    namespace "io.flutter.plugins.firebase.auth"
+                } else if (project.name == 'cloud_firestore') {
+                    namespace "io.flutter.plugins.firebase.firestore"
+                } else if (project.name == 'firebase_storage') {
+                    namespace "io.flutter.plugins.firebase.storage"
+                } else if (project.name == 'file_picker') {
+                    namespace "com.mr.flutter.plugin.filepicker"
+                } else {
+                    namespace "io.flutter.plugins.${project.name}"
+                }
+
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+
+                if (project.name == 'app') {
+                    kotlinOptions {
+                        jvmTarget = '17'
+                    }
+                }
+            }
+        }
+    }
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
