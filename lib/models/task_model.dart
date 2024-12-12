@@ -8,10 +8,15 @@ class TaskModel {
   final String createdBy;
   final DateTime createdAt;
   final DateTime dueDate;
-  final String status;
-  final String priority;
-  final List<String> attachments;
-  final List<Map<String, dynamic>> comments;
+  final String priority; // Acil, Normal, Düşük
+  final String status; // Beklemede, Devam Ediyor, Tamamlandı, Gecikmiş
+  final double progress; // İlerleme yüzdesi (0-100)
+  final List<String> attachments; // Dosya ekleri
+  final List<Comment> comments; // Yorumlar
+  final bool isRecurring; // Tekrarlı görev mi?
+  final String? recurrenceType; // Günlük, Haftalık, Aylık
+  final String department;
+  final List<String> watchers; // Görevi takip edenler
 
   TaskModel({
     required this.id,
@@ -21,57 +26,58 @@ class TaskModel {
     required this.createdBy,
     required this.createdAt,
     required this.dueDate,
-    required this.status,
     required this.priority,
+    required this.status,
+    this.progress = 0,
     this.attachments = const [],
     this.comments = const [],
+    this.isRecurring = false,
+    this.recurrenceType,
+    required this.department,
+    this.watchers = const [],
   });
-
-  factory TaskModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return TaskModel(
-      id: doc.id,
-      title: data['title'] ?? '',
-      description: data['description'] ?? '',
-      assignedTo: data['assignedTo'] ?? '',
-      createdBy: data['createdBy'] ?? '',
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      dueDate: (data['dueDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      status: data['status'] ?? 'pending',
-      priority: data['priority'] ?? 'medium',
-      attachments: List<String>.from(data['attachments'] ?? []),
-      comments: List<Map<String, dynamic>>.from(data['comments'] ?? []),
-    );
-  }
 
   Map<String, dynamic> toMap() {
     return {
+      'id': id,
       'title': title,
       'description': description,
       'assignedTo': assignedTo,
       'createdBy': createdBy,
       'createdAt': Timestamp.fromDate(createdAt),
       'dueDate': Timestamp.fromDate(dueDate),
-      'status': status,
       'priority': priority,
+      'status': status,
+      'progress': progress,
       'attachments': attachments,
-      'comments': comments,
+      'comments': comments.map((comment) => comment.toMap()).toList(),
+      'isRecurring': isRecurring,
+      'recurrenceType': recurrenceType,
+      'department': department,
+      'watchers': watchers,
     };
   }
 
   factory TaskModel.fromMap(Map<String, dynamic> map) {
     return TaskModel(
-      id: map['id'] ?? '',
-      title: map['title'] ?? '',
-      description: map['description'] ?? '',
-      assignedTo: map['assignedTo'] ?? '',
-      createdBy: map['createdBy'] ?? '',
-      createdAt: DateTime.parse(map['createdAt']),
-      dueDate: DateTime.parse(map['dueDate']),
-      status: map['status'] ?? '',
-      priority: map['priority'] ?? 'normal',
+      id: map['id'] as String,
+      title: map['title'] as String,
+      description: map['description'] as String,
+      assignedTo: map['assignedTo'] as String,
+      createdBy: map['createdBy'] as String,
+      createdAt: (map['createdAt'] as Timestamp).toDate(),
+      dueDate: (map['dueDate'] as Timestamp).toDate(),
+      priority: map['priority'] as String,
+      status: map['status'] as String,
+      progress: (map['progress'] as num).toDouble(),
       attachments: List<String>.from(map['attachments'] ?? []),
-      comments: List<Map<String, dynamic>>.from(map['comments'] ?? []),
+      comments: (map['comments'] as List<dynamic>?)
+          ?.map((comment) => Comment.fromMap(comment as Map<String, dynamic>))
+          .toList() ?? [],
+      isRecurring: map['isRecurring'] as bool? ?? false,
+      recurrenceType: map['recurrenceType'] as String?,
+      department: map['department'] as String,
+      watchers: List<String>.from(map['watchers'] ?? []),
     );
   }
 
@@ -83,10 +89,15 @@ class TaskModel {
     String? createdBy,
     DateTime? createdAt,
     DateTime? dueDate,
-    String? status,
     String? priority,
+    String? status,
+    double? progress,
     List<String>? attachments,
-    List<Map<String, dynamic>>? comments,
+    List<Comment>? comments,
+    bool? isRecurring,
+    String? recurrenceType,
+    String? department,
+    List<String>? watchers,
   }) {
     return TaskModel(
       id: id ?? this.id,
@@ -96,50 +107,51 @@ class TaskModel {
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       dueDate: dueDate ?? this.dueDate,
-      status: status ?? this.status,
       priority: priority ?? this.priority,
+      status: status ?? this.status,
+      progress: progress ?? this.progress,
       attachments: attachments ?? this.attachments,
       comments: comments ?? this.comments,
+      isRecurring: isRecurring ?? this.isRecurring,
+      recurrenceType: recurrenceType ?? this.recurrenceType,
+      department: department ?? this.department,
+      watchers: watchers ?? this.watchers,
     );
   }
 }
 
-class TaskAttachment {
+class Comment {
   final String id;
-  final String fileName;
-  final String fileUrl;
-  final String fileType;
-  final DateTime uploadedAt;
-  final String uploadedBy;
+  final String userId;
+  final String content;
+  final DateTime createdAt;
+  final List<String> attachments;
 
-  TaskAttachment({
+  Comment({
     required this.id,
-    required this.fileName,
-    required this.fileUrl,
-    required this.fileType,
-    required this.uploadedAt,
-    required this.uploadedBy,
+    required this.userId,
+    required this.content,
+    required this.createdAt,
+    this.attachments = const [],
   });
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'fileName': fileName,
-      'fileUrl': fileUrl,
-      'fileType': fileType,
-      'uploadedAt': uploadedAt.toIso8601String(),
-      'uploadedBy': uploadedBy,
+      'userId': userId,
+      'content': content,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'attachments': attachments,
     };
   }
 
-  factory TaskAttachment.fromMap(Map<String, dynamic> map) {
-    return TaskAttachment(
-      id: map['id'] ?? '',
-      fileName: map['fileName'] ?? '',
-      fileUrl: map['fileUrl'] ?? '',
-      fileType: map['fileType'] ?? '',
-      uploadedAt: DateTime.parse(map['uploadedAt']),
-      uploadedBy: map['uploadedBy'] ?? '',
+  factory Comment.fromMap(Map<String, dynamic> map) {
+    return Comment(
+      id: map['id'] as String,
+      userId: map['userId'] as String,
+      content: map['content'] as String,
+      createdAt: (map['createdAt'] as Timestamp).toDate(),
+      attachments: List<String>.from(map['attachments'] ?? []),
     );
   }
 }

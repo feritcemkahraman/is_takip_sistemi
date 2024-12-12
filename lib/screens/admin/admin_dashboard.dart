@@ -5,6 +5,7 @@ import '../../constants/app_theme.dart';
 import '../../constants/app_constants.dart';
 import '../login_screen.dart';
 import '../user_management_screen.dart';
+import '../meeting_list_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -103,6 +104,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
             label: Text('Görev Yönetimi'),
           ),
           const NavigationDrawerDestination(
+            icon: Icon(Icons.meeting_room_outlined),
+            selectedIcon: Icon(Icons.meeting_room),
+            label: Text('Toplantı Yönetimi'),
+          ),
+          const NavigationDrawerDestination(
             icon: Icon(Icons.business_outlined),
             selectedIcon: Icon(Icons.business),
             label: Text('Departman Yönetimi'),
@@ -134,6 +140,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           _buildDashboardPage(),
           UserManagementScreen(),
           _buildTaskManagementPage(),
+          const MeetingListScreen(),
           _buildDepartmentManagementPage(),
           _buildReportsPage(),
           _buildSettingsPage(),

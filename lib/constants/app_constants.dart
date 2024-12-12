@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 class AppConstants {
   // App
   static const String appName = 'İş Takip Sistemi';
@@ -46,37 +48,71 @@ class AppConstants {
   static const String roleEmployee = 'employee';
   static const String roleUser = 'user';
 
-  // Task Status Colors
-  static const Map<String, int> taskStatusColors = {
-    'pending': 0xFFFF9800,   // Orange
-    'inProgress': 0xFF2196F3, // Blue
-    'completed': 0xFF4CAF50,  // Green
-    'cancelled': 0xFFF44336,  // Red
+  // Departments
+  static const List<String> departments = [
+    'Satış / Pazarlama',
+    'Mühendislik Departmanı',
+    'Teknik Ekip',
+    'Muhasebe',
+    'İnsan Kaynakları',
+    'Yazılım / PR',
+  ];
+
+  // Task Priorities
+  static const String priorityHigh = 'high';
+  static const String priorityNormal = 'normal';
+  static const String priorityLow = 'low';
+
+  static const Map<String, String> priorityLabels = {
+    priorityHigh: 'Acil',
+    priorityNormal: 'Normal',
+    priorityLow: 'Düşük',
   };
 
-  // Task Status Labels
-  static const Map<String, String> taskStatusLabels = {
-    'pending': 'Beklemede',
-    'inProgress': 'Devam Ediyor',
-    'completed': 'Tamamlandı',
-    'cancelled': 'İptal Edildi',
+  static const Map<String, Color> priorityColors = {
+    priorityHigh: Colors.red,
+    priorityNormal: Colors.orange,
+    priorityLow: Colors.green,
   };
 
-  // Task Priority Colors
-  static const Map<String, int> taskPriorityColors = {
-    'low': 0xFF8BC34A,     // Light Green
-    'medium': 0xFFFFC107,  // Amber
-    'high': 0xFFE91E63,    // Pink
+  // Task Statuses
+  static const String statusPending = 'pending';
+  static const String statusInProgress = 'in_progress';
+  static const String statusCompleted = 'completed';
+  static const String statusDelayed = 'delayed';
+  static const String statusCancelled = 'cancelled';
+
+  static const Map<String, String> statusLabels = {
+    statusPending: 'Beklemede',
+    statusInProgress: 'Devam Ediyor',
+    statusCompleted: 'Tamamlandı',
+    statusDelayed: 'Gecikmiş',
+    statusCancelled: 'İptal Edildi',
   };
 
-  // Task Priority Labels
-  static const Map<String, String> taskPriorityLabels = {
-    'low': 'Düşük',
-    'medium': 'Orta',
-    'high': 'Yüksek',
+  static const Map<String, Color> statusColors = {
+    statusPending: Colors.orange,
+    statusInProgress: Colors.blue,
+    statusCompleted: Colors.green,
+    statusDelayed: Colors.red,
+    statusCancelled: Colors.grey,
   };
 
-  // Başarı mesajları
-  static const String successRegister = 'Kayıt başarılı!';
-  static const String successLogin = 'Giriş başarılı!';
+  // Task Recurrence Types
+  static const String recurrenceDaily = 'daily';
+  static const String recurrenceWeekly = 'weekly';
+  static const String recurrenceMonthly = 'monthly';
+
+  static const Map<String, String> recurrenceLabels = {
+    recurrenceDaily: 'Günlük',
+    recurrenceWeekly: 'Haftalık',
+    recurrenceMonthly: 'Aylık',
+  };
+
+  // Success Messages
+  static const String successTaskCreated = 'Görev başarıyla oluşturuldu';
+  static const String successTaskUpdated = 'Görev başarıyla güncellendi';
+  static const String successTaskDeleted = 'Görev başarıyla silindi';
+  static const String successCommentAdded = 'Yorum başarıyla eklendi';
+  static const String successFileUploaded = 'Dosya başarıyla yüklendi';
 }

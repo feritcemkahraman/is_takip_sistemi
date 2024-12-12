@@ -1,93 +1,112 @@
 import 'package:flutter/material.dart';
-import '../constants/app_theme.dart';
-import '../constants/app_constants.dart';
+import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
-import '../models/user_model.dart';
-import 'login_screen.dart';
-import 'user_management_screen.dart';
+import '../services/notification_service.dart';
+import '../constants/app_theme.dart';
+import 'task_list_screen.dart';
+import 'notification_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  final UserModel userData;
-
-  const HomeScreen({
-    Key? key,
-    required this.userData,
-  }) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _authService = AuthService();
+  int _selectedIndex = 0;
 
-  Future<void> _logout() async {
-    await _authService.signOut();
-    if (mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (context) => LoginScreen(),
-        ),
-        (route) => false,
-      );
-    }
+  final List<Widget> _pages = [
+    const TaskListScreen(),
+    const NotificationScreen(),
+    const ProfileScreen(),
+  ];
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool isAdmin = widget.userData.role == AppConstants.roleAdmin;
+    final authService = Provider.of<AuthService>(context);
+    final notificationService = Provider.of<NotificationService>(context);
+    final currentUser = authService.currentUser;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Hoş Geldiniz, ${widget.userData.name}'),
+        title: const Text('İş Takip Sistemi'),
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: _logout,
+            onPressed: () async {
+              await authService.signOut();
+              if (mounted) {
+                Navigator.pushReplacementNamed(context, '/login');
+              }
+            },
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.person),
-                title: Text(widget.userData.name),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      body: _pages[_selectedIndex],
+      bottomNavigationBar: StreamBuilder<int>(
+        stream: currentUser != null
+            ? notificationService.getUnreadCount(currentUser.uid)
+            : Stream.value(0),
+        builder: (context, snapshot) {
+          final unreadCount = snapshot.data ?? 0;
+
+          return BottomNavigationBar(
+            items: [
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.task),
+                label: 'Görevler',
+              ),
+              BottomNavigationBarItem(
+                icon: Stack(
                   children: [
-                    Text('Departman: ${widget.userData.department}'),
-                    Text('Rol: ${widget.userData.role == AppConstants.roleAdmin ? 'Yönetici' : 'Çalışan'}'),
+                    const Icon(Icons.notifications),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(1),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 12,
+                            minHeight: 12,
+                          ),
+                          child: Text(
+                            unreadCount > 99 ? '99+' : '$unreadCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
+                label: 'Bildirimler',
               ),
-            ),
-            if (isAdmin) ...[
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => UserManagementScreen(),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.people),
-                label: const Text('Kullanıcı Yönetimi'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: Colors.white,
-                ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.person),
+                label: 'Profil',
               ),
             ],
-          ],
-        ),
+            currentIndex: _selectedIndex,
+            selectedItemColor: AppTheme.primaryColor,
+            onTap: _onItemTapped,
+          );
+        },
       ),
     );
   }

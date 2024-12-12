@@ -2,11 +2,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../constants/app_constants.dart';
 import '../models/user_model.dart';
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final _authStateController = StreamController<UserModel?>.broadcast();
   UserModel? _currentUser;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   AuthService() {
     print('AuthService initialized');
@@ -45,7 +49,7 @@ class AuthService {
       return result.docs.isEmpty;
     } catch (e) {
       print('isUsernameAvailable hatası: $e');
-      throw 'Kullanıcı adı kontrolü sırasında hata oluştu: $e';
+      throw 'Kullanıcı adı kontrol�� sırasında hata oluştu: $e';
     }
   }
 
@@ -197,6 +201,59 @@ class AuthService {
         .collection(AppConstants.usersCollection)
         .doc(uid)
         .update({'role': role});
+  }
+
+  // Profil güncelleme
+  Future<void> updateUserProfile({
+    required String name,
+    required String department,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw 'Kullanıcı bulunamadı';
+
+      await _firestore.collection('users').doc(user.uid).update({
+        'name': name,
+        'department': department,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw 'Profil güncellenirken bir hata oluştu: $e';
+    }
+  }
+
+  // Şifre değiştirme
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw 'Kullanıcı bulunamadı';
+
+      // Mevcut şifreyi doğrula
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(credential);
+
+      // Yeni şifreyi ayarla
+      await user.updatePassword(newPassword);
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'wrong-password':
+          throw 'Mevcut şifre yanlış';
+        case 'weak-password':
+          throw 'Yeni şifre çok zayıf';
+        case 'requires-recent-login':
+          throw 'Güvenlik nedeniyle yeniden giriş yapmanız gerekiyor';
+        default:
+          throw 'Şifre değiştirilirken bir hata oluştu: ${e.message}';
+      }
+    } catch (e) {
+      throw 'Şifre değiştirilirken bir hata oluştu: $e';
+    }
   }
 
   void dispose() {
