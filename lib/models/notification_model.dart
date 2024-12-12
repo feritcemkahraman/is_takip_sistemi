@@ -3,37 +3,78 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class NotificationModel {
   final String id;
   final String title;
-  final String message;
+  final String body;
   final String type;
   final String userId;
-  final String? taskId;
-  final String? senderId;
+  final Map<String, dynamic> data;
+  final int priority;
   final bool isRead;
   final DateTime createdAt;
+  final DateTime? readAt;
+  final String? actionType;
+  final String? actionId;
+  final String? groupId;
+  final Map<String, dynamic> settings;
+  final DateTime? scheduledFor;
 
   NotificationModel({
     required this.id,
     required this.title,
-    required this.message,
+    required this.body,
     required this.type,
     required this.userId,
-    this.taskId,
-    this.senderId,
+    required this.data,
+    this.priority = 1,
     this.isRead = false,
     required this.createdAt,
+    this.readAt,
+    this.actionType,
+    this.actionId,
+    this.groupId,
+    this.settings = const {
+      'sound': true,
+      'vibration': true,
+      'badge': true,
+      'grouping': true,
+    },
+    this.scheduledFor,
   });
+
+  // Bildirim tipleri
+  static const String typeTask = 'task';
+  static const String typeMeeting = 'meeting';
+  static const String typeSystem = 'system';
+  static const String typeMessage = 'message';
+  static const String typeWorkflow = 'workflow';
+
+  // Bildirim öncelikleri
+  static const int priorityLow = 0;
+  static const int priorityNormal = 1;
+  static const int priorityHigh = 2;
+
+  // Bildirim aksiyonları
+  static const String actionView = 'view';
+  static const String actionApprove = 'approve';
+  static const String actionReject = 'reject';
+  static const String actionReply = 'reply';
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'title': title,
-      'message': message,
+      'body': body,
       'type': type,
       'userId': userId,
-      'taskId': taskId,
-      'senderId': senderId,
+      'data': data,
+      'priority': priority,
       'isRead': isRead,
       'createdAt': Timestamp.fromDate(createdAt),
+      'readAt': readAt != null ? Timestamp.fromDate(readAt!) : null,
+      'actionType': actionType,
+      'actionId': actionId,
+      'groupId': groupId,
+      'settings': settings,
+      'scheduledFor': scheduledFor != null ? Timestamp.fromDate(scheduledFor!) : null,
     };
   }
 
@@ -41,103 +82,158 @@ class NotificationModel {
     return NotificationModel(
       id: map['id'] as String,
       title: map['title'] as String,
-      message: map['message'] as String,
+      body: map['body'] as String,
       type: map['type'] as String,
       userId: map['userId'] as String,
-      taskId: map['taskId'] as String?,
-      senderId: map['senderId'] as String?,
+      data: Map<String, dynamic>.from(map['data'] as Map),
+      priority: map['priority'] as int? ?? 1,
       isRead: map['isRead'] as bool? ?? false,
       createdAt: (map['createdAt'] as Timestamp).toDate(),
+      readAt: (map['readAt'] as Timestamp?)?.toDate(),
+      actionType: map['actionType'] as String?,
+      actionId: map['actionId'] as String?,
+      groupId: map['groupId'] as String?,
+      settings: Map<String, dynamic>.from(map['settings'] ?? {
+        'sound': true,
+        'vibration': true,
+        'badge': true,
+        'grouping': true,
+      }),
+      scheduledFor: (map['scheduledFor'] as Timestamp?)?.toDate(),
     );
   }
 
   NotificationModel copyWith({
     String? id,
     String? title,
-    String? message,
+    String? body,
     String? type,
     String? userId,
-    String? taskId,
-    String? senderId,
+    Map<String, dynamic>? data,
+    int? priority,
     bool? isRead,
     DateTime? createdAt,
+    DateTime? readAt,
+    String? actionType,
+    String? actionId,
+    String? groupId,
+    Map<String, dynamic>? settings,
+    DateTime? scheduledFor,
   }) {
     return NotificationModel(
       id: id ?? this.id,
       title: title ?? this.title,
-      message: message ?? this.message,
+      body: body ?? this.body,
       type: type ?? this.type,
       userId: userId ?? this.userId,
-      taskId: taskId ?? this.taskId,
-      senderId: senderId ?? this.senderId,
+      data: data ?? this.data,
+      priority: priority ?? this.priority,
       isRead: isRead ?? this.isRead,
       createdAt: createdAt ?? this.createdAt,
+      readAt: readAt ?? this.readAt,
+      actionType: actionType ?? this.actionType,
+      actionId: actionId ?? this.actionId,
+      groupId: groupId ?? this.groupId,
+      settings: settings ?? this.settings,
+      scheduledFor: scheduledFor ?? this.scheduledFor,
     );
   }
 
-  // Bildirim tipleri
-  static const String typeTaskAssigned = 'task_assigned';
-  static const String typeTaskUpdated = 'task_updated';
-  static const String typeTaskCompleted = 'task_completed';
-  static const String typeTaskOverdue = 'task_overdue';
-  static const String typeTaskReminder = 'task_reminder';
-  static const String typeTaskComment = 'task_comment';
-  static const String typeTaskStatusChanged = 'task_status_changed';
-  static const String typeTaskRemoved = 'task_removed';
-  static const String typeMeetingInvite = 'meeting_invite';
-  static const String typeMeetingUpdate = 'meeting_update';
-  static const String typeMeetingCancelled = 'meeting_cancelled';
-  static const String typeMeetingReminder = 'meeting_reminder';
-  static const String typeMeetingNote = 'meeting_note';
-  static const String typeMeetingAgenda = 'meeting_agenda';
-  static const String typeMeetingStatus = 'meeting_status';
-  static const String typeMeetingRemoved = 'meeting_removed';
-  static const String typeMeetingMinutes = 'meeting_minutes';
-  static const String typeMeetingDecision = 'meeting_decision';
-  static const String typeMeetingDecisionOverdue = 'meeting_decision_overdue';
+  // FCM formatına dönüştürme
+  Map<String, dynamic> toFCMPayload() {
+    return {
+      'notification': {
+        'title': title,
+        'body': body,
+        'priority': priority == priorityHigh ? 'high' : 'normal',
+        'android_channel_id': 'default_channel',
+        'sound': settings['sound'] ? 'default' : null,
+        'badge': settings['badge'] ? '1' : null,
+      },
+      'data': {
+        'id': id,
+        'type': type,
+        'userId': userId,
+        'actionType': actionType ?? '',
+        'actionId': actionId ?? '',
+        'groupId': groupId ?? '',
+        ...data,
+      },
+      'android': {
+        'priority': priority == priorityHigh ? 'high' : 'normal',
+        'notification': {
+          'channel_id': 'default_channel',
+          'notification_priority': priority == priorityHigh ? 'PRIORITY_HIGH' : 'PRIORITY_DEFAULT',
+          'default_sound': settings['sound'],
+          'default_vibrate_timings': settings['vibration'],
+        },
+      },
+      'apns': {
+        'payload': {
+          'aps': {
+            'sound': settings['sound'] ? 'default' : null,
+            'badge': settings['badge'] ? 1 : null,
+            'content-available': 1,
+          },
+        },
+      },
+    };
+  }
 
-  static String getTitle(String type) {
+  // Bildirim önizleme metni
+  String get previewText {
     switch (type) {
-      case typeTaskAssigned:
-        return 'Yeni Görev Atandı';
-      case typeTaskUpdated:
-        return 'Görev Güncellendi';
-      case typeTaskCompleted:
-        return 'Görev Tamamlandı';
-      case typeTaskOverdue:
-        return 'Görev Gecikti';
-      case typeTaskReminder:
-        return 'Görev Hatırlatması';
-      case typeTaskComment:
-        return 'Yeni Görev Yorumu';
-      case typeTaskStatusChanged:
-        return 'Görev Durumu Değişti';
-      case typeTaskRemoved:
-        return 'Görevden Çıkarıldınız';
-      case typeMeetingInvite:
-        return 'Yeni Toplantı Daveti';
-      case typeMeetingUpdate:
-        return 'Toplantı Güncellendi';
-      case typeMeetingCancelled:
-        return 'Toplantı İptal Edildi';
-      case typeMeetingReminder:
-        return 'Toplantı Hatırlatması';
-      case typeMeetingNote:
-        return 'Yeni Toplantı Notu';
-      case typeMeetingAgenda:
-        return 'Yeni Gündem Maddesi';
-      case typeMeetingStatus:
-        return 'Toplantı Durumu';
-      case typeMeetingRemoved:
-        return 'Toplantıdan Çıkarıldınız';
-      case typeMeetingMinutes:
-        return 'Toplantı Tutanağı';
-      case typeMeetingDecision:
-        return 'Toplantı Kararı';
-      case typeMeetingDecisionOverdue:
-        return 'Toplantı Kararı Gecikti';
+      case typeTask:
+        return 'Görev: $body';
+      case typeMeeting:
+        return 'Toplantı: $body';
+      case typeMessage:
+        return 'Mesaj: $body';
+      case typeWorkflow:
+        return 'İş Akışı: $body';
       default:
-        return 'Bildirim';
+        return body;
     }
+  }
+
+  // Bildirim ikonunu getir
+  String get icon {
+    switch (type) {
+      case typeTask:
+        return 'task';
+      case typeMeeting:
+        return 'meeting';
+      case typeMessage:
+        return 'message';
+      case typeWorkflow:
+        return 'workflow';
+      default:
+        return 'notification';
+    }
+  }
+
+  // Bildirim rengini getir
+  int get color {
+    switch (priority) {
+      case priorityHigh:
+        return 0xFFFF0000; // Kırmızı
+      case priorityNormal:
+        return 0xFF2196F3; // Mavi
+      case priorityLow:
+        return 0xFF4CAF50; // Yeşil
+      default:
+        return 0xFF9E9E9E; // Gri
+    }
+  }
+
+  // Bildirim zamanı geldi mi?
+  bool get isScheduledTimeReached {
+    if (scheduledFor == null) return true;
+    return DateTime.now().isAfter(scheduledFor!);
+  }
+
+  // Bildirim gruplanabilir mi?
+  bool get canBeGrouped {
+    return settings['grouping'] == true && groupId != null;
   }
 } 

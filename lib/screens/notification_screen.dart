@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import '../models/notification_model.dart';
 import '../services/notification_service.dart';
 import '../services/auth_service.dart';
-import '../models/notification_model.dart';
-import '../constants/app_theme.dart';
-import 'task_detail_screen.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
@@ -14,198 +11,229 @@ class NotificationScreen extends StatefulWidget {
 }
 
 class _NotificationScreenState extends State<NotificationScreen> {
-  bool _isLoading = false;
+  final NotificationService _notificationService = NotificationService();
+  final AuthService _authService = AuthService();
+  String? _userId;
 
-  Future<void> _markAllAsRead() async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final notificationService =
-        Provider.of<NotificationService>(context, listen: false);
-    final currentUser = authService.currentUser;
-
-    if (currentUser == null) return;
-
-    setState(() => _isLoading = true);
-    try {
-      await notificationService.markAllAsRead(currentUser.uid);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Tüm bildirimler okundu olarak işaretlendi'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
+  @override
+  void initState() {
+    super.initState();
+    _initializeNotifications();
   }
 
-  void _onNotificationTap(NotificationModel notification) async {
-    final notificationService =
-        Provider.of<NotificationService>(context, listen: false);
-
-    // Bildirimi okundu olarak işaretle
-    await notificationService.markAsRead(notification.id);
-
-    // Eğer bildirim bir görevle ilgiliyse, görev detayına git
-    if (notification.taskId != null && mounted) {
-      // TODO: Görev detayına yönlendir
-      // Navigator.push(
-      //   context,
-      //   MaterialPageRoute(
-      //     builder: (context) => TaskDetailScreen(taskId: notification.taskId!),
-      //   ),
-      // );
+  Future<void> _initializeNotifications() async {
+    final user = await _authService.getCurrentUser();
+    if (user != null) {
+      setState(() {
+        _userId = user.uid;
+      });
+      await _notificationService.requestPermissions();
+      await _notificationService.initialize();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context);
-    final notificationService = Provider.of<NotificationService>(context);
-    final currentUser = authService.currentUser;
-
-    if (currentUser == null) {
-      return const Center(child: Text('Kullanıcı bulunamadı'));
+    if (_userId == null) {
+      return const Center(child: CircularProgressIndicator());
     }
 
     return Scaffold(
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton.icon(
-                  onPressed: _isLoading ? null : _markAllAsRead,
+      appBar: AppBar(
+        title: const Text('Bildirimler'),
+        actions: [
+          StreamBuilder<int>(
+            stream: _notificationService.getUnreadCount(_userId!),
+            builder: (context, snapshot) {
+              final unreadCount = snapshot.data ?? 0;
+              if (unreadCount > 0) {
+                return TextButton.icon(
+                  onPressed: () => _notificationService.markAllAsRead(_userId!),
                   icon: const Icon(Icons.done_all),
                   label: const Text('Tümünü Okundu İşaretle'),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder<List<NotificationModel>>(
-              stream: notificationService.getNotifications(currentUser.uid),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                if (snapshot.hasError) {
-                  return Center(child: Text('Hata: ${snapshot.error}'));
-                }
-
-                final notifications = snapshot.data ?? [];
-
-                if (notifications.isEmpty) {
-                  return const Center(
-                    child: Text('Bildirim bulunmuyor'),
-                  );
-                }
-
-                return ListView.builder(
-                  itemCount: notifications.length,
-                  itemBuilder: (context, index) {
-                    final notification = notifications[index];
-                    return _buildNotificationCard(notification);
-                  },
                 );
-              },
-            ),
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            onPressed: () => _showDeleteAllDialog(),
           ),
         ],
+      ),
+      body: StreamBuilder<List<NotificationModel>>(
+        stream: _notificationService.getNotifications(_userId!),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Bir hata oluştu: ${snapshot.error}'),
+            );
+          }
+
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final notifications = snapshot.data!;
+          if (notifications.isEmpty) {
+            return const Center(
+              child: Text('Henüz bildirim bulunmuyor'),
+            );
+          }
+
+          return ListView.builder(
+            itemCount: notifications.length,
+            itemBuilder: (context, index) {
+              final notification = notifications[index];
+              return _buildNotificationItem(notification);
+            },
+          );
+        },
       ),
     );
   }
 
-  Widget _buildNotificationCard(NotificationModel notification) {
-    final theme = Theme.of(context);
-    final backgroundColor =
-        notification.isRead ? Colors.white : Colors.blue.withOpacity(0.1);
-
-    IconData iconData;
-    Color iconColor;
-
-    switch (notification.type) {
-      case NotificationModel.typeTaskAssigned:
-        iconData = Icons.assignment;
-        iconColor = Colors.blue;
-        break;
-      case NotificationModel.typeTaskUpdated:
-        iconData = Icons.update;
-        iconColor = Colors.orange;
-        break;
-      case NotificationModel.typeCommentAdded:
-        iconData = Icons.comment;
-        iconColor = Colors.green;
-        break;
-      case NotificationModel.typeTaskCompleted:
-        iconData = Icons.check_circle;
-        iconColor = Colors.green;
-        break;
-      case NotificationModel.typeTaskOverdue:
-        iconData = Icons.warning;
-        iconColor = Colors.red;
-        break;
-      case NotificationModel.typeTaskReminder:
-        iconData = Icons.alarm;
-        iconColor = Colors.orange;
-        break;
-      default:
-        iconData = Icons.notifications;
-        iconColor = Colors.grey;
-    }
-
-    return Card(
-      color: backgroundColor,
+  Widget _buildNotificationItem(NotificationModel notification) {
+    return Dismissible(
+      key: Key(notification.id),
+      background: Container(
+        color: Colors.red,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 16),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      direction: DismissDirection.endToStart,
+      onDismissed: (direction) {
+        _notificationService.deleteNotification(notification.id);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bildirim silindi')),
+        );
+      },
       child: ListTile(
-        onTap: () => _onNotificationTap(notification),
         leading: CircleAvatar(
-          backgroundColor: iconColor.withOpacity(0.1),
-          child: Icon(iconData, color: iconColor),
+          backgroundColor: Color(notification.color),
+          child: Icon(
+            Icons.notifications,
+            color: Colors.white,
+          ),
         ),
         title: Text(
           notification.title,
-          style: theme.textTheme.titleMedium?.copyWith(
+          style: TextStyle(
             fontWeight: notification.isRead ? FontWeight.normal : FontWeight.bold,
           ),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 4),
-            Text(notification.message),
+            Text(notification.body),
             const SizedBox(height: 4),
             Text(
-              '${notification.createdAt.day}/${notification.createdAt.month}/${notification.createdAt.year} ${notification.createdAt.hour}:${notification.createdAt.minute}',
-              style: theme.textTheme.bodySmall,
+              _formatDate(notification.createdAt),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         ),
         trailing: notification.isRead
             ? null
-            : Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor,
-                  shape: BoxShape.circle,
-                ),
+            : IconButton(
+                icon: const Icon(Icons.done),
+                onPressed: () =>
+                    _notificationService.markAsRead(notification.id),
               ),
+        onTap: () {
+          if (!notification.isRead) {
+            _notificationService.markAsRead(notification.id);
+          }
+          _handleNotificationTap(notification);
+        },
       ),
     );
+  }
+
+  void _handleNotificationTap(NotificationModel notification) {
+    // Bildirim tipine göre yönlendirme
+    switch (notification.type) {
+      case NotificationModel.typeTask:
+        Navigator.pushNamed(
+          context,
+          '/task_detail',
+          arguments: notification.data['taskId'],
+        );
+        break;
+      case NotificationModel.typeMeeting:
+        Navigator.pushNamed(
+          context,
+          '/meeting_detail',
+          arguments: notification.data['meetingId'],
+        );
+        break;
+      case NotificationModel.typeWorkflow:
+        Navigator.pushNamed(
+          context,
+          '/workflow_detail',
+          arguments: notification.data['workflowId'],
+        );
+        break;
+      case NotificationModel.typeMessage:
+        Navigator.pushNamed(
+          context,
+          '/message_detail',
+          arguments: notification.data['messageId'],
+        );
+        break;
+    }
+  }
+
+  Future<void> _showDeleteAllDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tüm Bildirimleri Sil'),
+        content: const Text('Tüm bildirimler silinecek. Emin misiniz?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && mounted) {
+      await _notificationService.deleteAllNotifications(_userId!);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tüm bildirimler silindi')),
+      );
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays == 0) {
+      if (difference.inHours == 0) {
+        if (difference.inMinutes == 0) {
+          return 'Az önce';
+        }
+        return '${difference.inMinutes} dakika önce';
+      }
+      return '${difference.inHours} saat önce';
+    } else if (difference.inDays == 1) {
+      return 'Dün';
+    }
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  @override
+  void dispose() {
+    _notificationService.dispose();
+    super.dispose();
   }
 } 
