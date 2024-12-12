@@ -1,70 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/notification_model.dart';
-import '../models/task_model.dart';
-import '../constants/app_constants.dart';
+import '../models/meeting_model.dart';
 
 class NotificationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
-  final String _collection = 'notifications';
 
-  // FCM token'ı kaydet
-  Future<void> saveToken(String userId) async {
-    final token = await _messaging.getToken();
-    if (token != null) {
-      await _firestore.collection('users').doc(userId).update({
-        'fcmToken': token,
-      });
-    }
-  }
-
-  // Bildirimleri getir
-  Stream<List<NotificationModel>> getNotifications(String userId) {
-    return _firestore
-        .collection(_collection)
-        .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => NotificationModel.fromMap(doc.data()))
-            .toList());
-  }
-
-  // Okunmamış bildirim sayısını getir
-  Stream<int> getUnreadCount(String userId) {
-    return _firestore
-        .collection(_collection)
-        .where('userId', isEqualTo: userId)
-        .where('isRead', isEqualTo: false)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.length);
-  }
-
-  // Bildirimi okundu olarak işaretle
-  Future<void> markAsRead(String notificationId) async {
-    await _firestore.collection(_collection).doc(notificationId).update({
-      'isRead': true,
-    });
-  }
-
-  // Tüm bildirimleri okundu olarak işaretle
-  Future<void> markAllAsRead(String userId) async {
-    final batch = _firestore.batch();
-    final notifications = await _firestore
-        .collection(_collection)
-        .where('userId', isEqualTo: userId)
-        .where('isRead', isEqualTo: false)
-        .get();
-
-    for (var doc in notifications.docs) {
-      batch.update(doc.reference, {'isRead': true});
-    }
-
-    await batch.commit();
-  }
-
-  // Bildirim oluştur
   Future<void> createNotification({
     required String title,
     required String message,
@@ -73,143 +13,213 @@ class NotificationService {
     String? taskId,
     String? senderId,
   }) async {
-    final notification = NotificationModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      title: title,
-      message: message,
-      type: type,
-      userId: userId,
-      taskId: taskId,
-      senderId: senderId,
-      createdAt: DateTime.now(),
-    );
-
-    await _firestore
-        .collection(_collection)
-        .doc(notification.id)
-        .set(notification.toMap());
-
-    // FCM bildirimi gönder
-    final userDoc = await _firestore.collection('users').doc(userId).get();
-    final fcmToken = userDoc.data()?['fcmToken'] as String?;
-
-    if (fcmToken != null) {
-      await _messaging.sendMessage(
-        to: fcmToken,
-        data: {
-          'title': title,
-          'body': message,
-          'type': type,
-          'taskId': taskId ?? '',
-        },
-      );
-    }
-  }
-
-  // Görev atandığında bildirim gönder
-  Future<void> sendTaskAssignedNotification(TaskModel task) async {
-    await createNotification(
-      title: NotificationModel.getTitle(NotificationModel.typeTaskAssigned),
-      message: '${task.title} görevi size atandı',
-      type: NotificationModel.typeTaskAssigned,
-      userId: task.assignedTo,
-      taskId: task.id,
-      senderId: task.createdBy,
-    );
-  }
-
-  // Görev güncellendiğinde bildirim gönder
-  Future<void> sendTaskUpdatedNotification(TaskModel task) async {
-    final watchers = [...task.watchers];
-    if (!watchers.contains(task.assignedTo)) {
-      watchers.add(task.assignedTo);
-    }
-
-    for (final userId in watchers) {
-      await createNotification(
-        title: NotificationModel.getTitle(NotificationModel.typeTaskUpdated),
-        message: '${task.title} görevi güncellendi',
-        type: NotificationModel.typeTaskUpdated,
+    try {
+      final notification = NotificationModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: title,
+        message: message,
+        type: type,
         userId: userId,
-        taskId: task.id,
+        taskId: taskId,
+        senderId: senderId,
+        createdAt: DateTime.now(),
+      );
+
+      await _firestore
+          .collection('notifications')
+          .doc(notification.id)
+          .set(notification.toMap());
+    } catch (e) {
+      throw Exception('Bildirim oluşturulurken bir hata oluştu: $e');
+    }
+  }
+
+  Future<void> markAsRead(String notificationId) async {
+    try {
+      await _firestore.collection('notifications').doc(notificationId).update({
+        'isRead': true,
+      });
+    } catch (e) {
+      throw Exception('Bildirim okundu olarak işaretlenirken bir hata oluştu: $e');
+    }
+  }
+
+  Future<void> deleteNotification(String notificationId) async {
+    try {
+      await _firestore.collection('notifications').doc(notificationId).delete();
+    } catch (e) {
+      throw Exception('Bildirim silinirken bir hata oluştu: $e');
+    }
+  }
+
+  Stream<List<NotificationModel>> getUserNotifications(String userId) {
+    return _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => NotificationModel.fromMap(doc.data()))
+            .toList());
+  }
+
+  Future<int> getUnreadCount(String userId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection('notifications')
+          .where('userId', isEqualTo: userId)
+          .where('isRead', isEqualTo: false)
+          .get();
+
+      return querySnapshot.docs.length;
+    } catch (e) {
+      throw Exception('Okunmamış bildirim sayısı alınırken bir hata oluştu: $e');
+    }
+  }
+
+  // Toplantı tutanağı eklendi bildirimi
+  Future<void> sendMeetingMinutesAddedNotification(MeetingModel meeting) async {
+    for (final participant in meeting.participants) {
+      await createNotification(
+        title: NotificationModel.getTitle(NotificationModel.typeMeetingMinutes),
+        message: '${meeting.title} toplantısına yeni tutanak eklendi',
+        type: NotificationModel.typeMeetingMinutes,
+        userId: participant.userId,
+        taskId: meeting.id,
+        senderId: meeting.organizerId,
       );
     }
   }
 
-  // Yorum eklendiğinde bildirim gönder
-  Future<void> sendCommentAddedNotification(
-    TaskModel task,
-    Comment comment,
+  // Toplantı tutanağı onaylandı bildirimi
+  Future<void> sendMeetingMinutesApprovedNotification(MeetingModel meeting) async {
+    for (final participant in meeting.participants) {
+      await createNotification(
+        title: NotificationModel.getTitle(NotificationModel.typeMeetingMinutes),
+        message: '${meeting.title} toplantısının tutanağı onaylandı',
+        type: NotificationModel.typeMeetingMinutes,
+        userId: participant.userId,
+        taskId: meeting.id,
+        senderId: meeting.minutes?.approvedBy,
+      );
+    }
+  }
+
+  // Toplantı kararı eklendi bildirimi
+  Future<void> sendMeetingDecisionAddedNotification(
+    MeetingModel meeting,
+    MeetingDecision decision,
   ) async {
-    final watchers = [...task.watchers];
-    if (!watchers.contains(task.assignedTo)) {
-      watchers.add(task.assignedTo);
-    }
-
-    for (final userId in watchers) {
-      if (userId != comment.userId) {
-        await createNotification(
-          title: NotificationModel.getTitle(NotificationModel.typeCommentAdded),
-          message: '${task.title} görevine yeni bir yorum eklendi',
-          type: NotificationModel.typeCommentAdded,
-          userId: userId,
-          taskId: task.id,
-          senderId: comment.userId,
-        );
-      }
-    }
-  }
-
-  // Görev tamamlandığında bildirim gönder
-  Future<void> sendTaskCompletedNotification(TaskModel task) async {
-    final watchers = [...task.watchers];
-    if (!watchers.contains(task.createdBy)) {
-      watchers.add(task.createdBy);
-    }
-
-    for (final userId in watchers) {
-      if (userId != task.assignedTo) {
-        await createNotification(
-          title: NotificationModel.getTitle(NotificationModel.typeTaskCompleted),
-          message: '${task.title} görevi tamamlandı',
-          type: NotificationModel.typeTaskCompleted,
-          userId: userId,
-          taskId: task.id,
-          senderId: task.assignedTo,
-        );
-      }
-    }
-  }
-
-  // Geciken görevler için bildirim gönder
-  Future<void> sendTaskOverdueNotification(TaskModel task) async {
-    final watchers = [...task.watchers];
-    if (!watchers.contains(task.assignedTo)) {
-      watchers.add(task.assignedTo);
-    }
-    if (!watchers.contains(task.createdBy)) {
-      watchers.add(task.createdBy);
-    }
-
-    for (final userId in watchers) {
+    // Sorumlu kişiye bildirim gönder
+    if (decision.assignedTo != null) {
       await createNotification(
-        title: NotificationModel.getTitle(NotificationModel.typeTaskOverdue),
-        message: '${task.title} görevi gecikti',
-        type: NotificationModel.typeTaskOverdue,
-        userId: userId,
-        taskId: task.id,
+        title: NotificationModel.getTitle(NotificationModel.typeMeetingDecision),
+        message: '${meeting.title} toplantısında size yeni bir görev atandı',
+        type: NotificationModel.typeMeetingDecision,
+        userId: decision.assignedTo!,
+        taskId: meeting.id,
+        senderId: decision.createdBy,
+      );
+    }
+
+    // Toplantı organizatörüne bildirim gönder
+    if (meeting.organizerId != decision.createdBy) {
+      await createNotification(
+        title: NotificationModel.getTitle(NotificationModel.typeMeetingDecision),
+        message: '${meeting.title} toplantısına yeni bir karar eklendi',
+        type: NotificationModel.typeMeetingDecision,
+        userId: meeting.organizerId,
+        taskId: meeting.id,
+        senderId: decision.createdBy,
       );
     }
   }
 
-  // Görev hatırlatması gönder
-  Future<void> sendTaskReminderNotification(TaskModel task) async {
+  // Toplantı kararı güncellendi bildirimi
+  Future<void> sendMeetingDecisionUpdatedNotification(
+    MeetingModel meeting,
+    MeetingDecision decision,
+  ) async {
+    final List<String> notifyUsers = [meeting.organizerId];
+    
+    if (decision.assignedTo != null) {
+      notifyUsers.add(decision.assignedTo!);
+    }
+
+    for (final userId in notifyUsers) {
+      if (userId != decision.createdBy) {
+        await createNotification(
+          title: NotificationModel.getTitle(NotificationModel.typeMeetingDecision),
+          message: '${meeting.title} toplantısındaki bir karar güncellendi',
+          type: NotificationModel.typeMeetingDecision,
+          userId: userId,
+          taskId: meeting.id,
+          senderId: decision.createdBy,
+        );
+      }
+    }
+  }
+
+  // Toplantı kararı tamamlandı bildirimi
+  Future<void> sendMeetingDecisionCompletedNotification(
+    MeetingModel meeting,
+    MeetingDecision decision,
+  ) async {
     await createNotification(
-      title: NotificationModel.getTitle(NotificationModel.typeTaskReminder),
-      message: '${task.title} görevi için son teslim tarihi yaklaşıyor',
-      type: NotificationModel.typeTaskReminder,
-      userId: task.assignedTo,
-      taskId: task.id,
+      title: NotificationModel.getTitle(NotificationModel.typeMeetingDecision),
+      message: '${meeting.title} toplantısındaki bir karar tamamlandı',
+      type: NotificationModel.typeMeetingDecision,
+      userId: meeting.organizerId,
+      taskId: meeting.id,
+      senderId: decision.assignedTo,
     );
+  }
+
+  // Toplantı kararı iptal edildi bildirimi
+  Future<void> sendMeetingDecisionCancelledNotification(
+    MeetingModel meeting,
+    MeetingDecision decision,
+  ) async {
+    final List<String> notifyUsers = [meeting.organizerId];
+    
+    if (decision.assignedTo != null) {
+      notifyUsers.add(decision.assignedTo!);
+    }
+
+    for (final userId in notifyUsers) {
+      if (userId != decision.createdBy) {
+        await createNotification(
+          title: NotificationModel.getTitle(NotificationModel.typeMeetingDecision),
+          message: '${meeting.title} toplantısındaki bir karar iptal edildi',
+          type: NotificationModel.typeMeetingDecision,
+          userId: userId,
+          taskId: meeting.id,
+          senderId: decision.createdBy,
+        );
+      }
+    }
+  }
+
+  // Toplantı kararı gecikti bildirimi
+  Future<void> sendMeetingDecisionOverdueNotification(
+    MeetingModel meeting,
+    MeetingDecision decision,
+  ) async {
+    final List<String> notifyUsers = [meeting.organizerId];
+    
+    if (decision.assignedTo != null) {
+      notifyUsers.add(decision.assignedTo!);
+    }
+
+    for (final userId in notifyUsers) {
+      await createNotification(
+        title: NotificationModel.getTitle(NotificationModel.typeMeetingDecisionOverdue),
+        message: '${meeting.title} toplantısındaki bir karar gecikti',
+        type: NotificationModel.typeMeetingDecisionOverdue,
+        userId: userId,
+        taskId: meeting.id,
+        senderId: decision.createdBy,
+      );
+    }
   }
 } 

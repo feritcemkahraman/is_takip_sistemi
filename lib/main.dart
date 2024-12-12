@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import 'services/auth_service.dart';
 import 'services/task_service.dart';
 import 'services/notification_service.dart';
@@ -25,11 +26,43 @@ import 'models/meeting_model.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+
+  // Toplantı kararları için arka plan görevi başlat
+  final meetingService = MeetingService();
+  meetingService.startOverdueDecisionsCheck();
+
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  Timer? _reminderTimer;
+  final _meetingService = MeetingService();
+
+  @override
+  void initState() {
+    super.initState();
+    _startReminderTimer();
+  }
+
+  @override
+  void dispose() {
+    _reminderTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startReminderTimer() {
+    // Her 5 dakikada bir hatırlatmaları kontrol et
+    _reminderTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
+      _meetingService.checkUpcomingReminders();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +84,7 @@ class MyApp extends StatelessWidget {
           create: (_) => ReportService(),
         ),
         Provider<MeetingService>(
-          create: (_) => MeetingService(),
+          create: (_) => _meetingService,
         ),
         StreamProvider(
           create: (context) => context.read<AuthService>().authStateChanges,

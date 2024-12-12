@@ -36,6 +36,9 @@ class _EditMeetingScreenState extends State<EditMeetingScreen> {
   late String _recurrenceEndType;
   late int _recurrenceOccurrences;
   late DateTime _recurrenceEndDate;
+  late bool _reminderEnabled;
+  late List<int> _reminderMinutes;
+  late String _reminderType;
 
   @override
   void initState() {
@@ -58,6 +61,9 @@ class _EditMeetingScreenState extends State<EditMeetingScreen> {
     _recurrenceEndType = widget.meeting.recurrenceEndType ?? MeetingModel.endNever;
     _recurrenceOccurrences = widget.meeting.recurrenceOccurrences ?? 1;
     _recurrenceEndDate = widget.meeting.recurrenceEndDate ?? DateTime.now().add(const Duration(days: 30));
+    _reminderEnabled = widget.meeting.reminderEnabled;
+    _reminderMinutes = List.from(widget.meeting.reminderMinutes);
+    _reminderType = widget.meeting.reminderType;
   }
 
   @override
@@ -162,6 +168,9 @@ class _EditMeetingScreenState extends State<EditMeetingScreen> {
         recurrenceEndType: _isRecurring ? _recurrenceEndType : null,
         recurrenceOccurrences: _isRecurring ? _recurrenceOccurrences : null,
         recurrenceEndDate: _isRecurring ? _recurrenceEndDate : null,
+        reminderEnabled: _reminderEnabled,
+        reminderMinutes: _reminderMinutes,
+        reminderType: _reminderType,
         lastUpdatedAt: DateTime.now(),
       );
 
@@ -236,6 +245,8 @@ class _EditMeetingScreenState extends State<EditMeetingScreen> {
             _buildLocationSection(),
             const SizedBox(height: 16),
             _buildRecurrenceSection(),
+            const SizedBox(height: 16),
+            _buildReminderSection(),
             const SizedBox(height: 16),
             _buildAgendaSection(),
             const SizedBox(height: 16),
@@ -540,6 +551,102 @@ class _EditMeetingScreenState extends State<EditMeetingScreen> {
                   });
                 }
               },
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildReminderSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Hatırlatmalar',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          title: const Text('Hatırlatmaları Etkinleştir'),
+          value: _reminderEnabled,
+          onChanged: (value) {
+            setState(() {
+              _reminderEnabled = value;
+            });
+          },
+        ),
+        if (_reminderEnabled) ...[
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: _reminderType,
+            decoration: const InputDecoration(
+              labelText: 'Hatırlatma Türü',
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              DropdownMenuItem(
+                value: MeetingModel.reminderTypeApp,
+                child: Text(MeetingModel.getReminderTypeTitle(MeetingModel.reminderTypeApp)),
+              ),
+              DropdownMenuItem(
+                value: MeetingModel.reminderTypeEmail,
+                child: Text(MeetingModel.getReminderTypeTitle(MeetingModel.reminderTypeEmail)),
+              ),
+              DropdownMenuItem(
+                value: MeetingModel.reminderTypeBoth,
+                child: Text(MeetingModel.getReminderTypeTitle(MeetingModel.reminderTypeBoth)),
+              ),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                setState(() {
+                  _reminderType = value;
+                });
+              }
+            },
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Hatırlatma Zamanları',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: MeetingModel.reminderTimes.map((minutes) {
+              final isSelected = _reminderMinutes.contains(minutes);
+              return FilterChip(
+                label: Text(MeetingModel.formatReminderTime(minutes)),
+                selected: isSelected,
+                onSelected: (selected) {
+                  setState(() {
+                    if (selected) {
+                      _reminderMinutes.add(minutes);
+                      _reminderMinutes.sort();
+                    } else {
+                      _reminderMinutes.remove(minutes);
+                    }
+                  });
+                },
+              );
+            }).toList(),
+          ),
+          if (_reminderMinutes.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'En az bir hatırlatma zamanı seçin',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 12,
+                ),
+              ),
             ),
         ],
       ],

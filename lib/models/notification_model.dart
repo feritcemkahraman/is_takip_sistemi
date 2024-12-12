@@ -4,12 +4,12 @@ class NotificationModel {
   final String id;
   final String title;
   final String message;
-  final String type; // task_assigned, task_updated, comment_added, etc.
-  final String userId; // Bildirimin gönderileceği kullanıcı
-  final String? taskId; // İlgili görev varsa
-  final String? senderId; // Bildirimi oluşturan kullanıcı
-  final DateTime createdAt;
+  final String type;
+  final String userId;
+  final String? taskId;
+  final String? senderId;
   final bool isRead;
+  final DateTime createdAt;
 
   NotificationModel({
     required this.id,
@@ -19,8 +19,8 @@ class NotificationModel {
     required this.userId,
     this.taskId,
     this.senderId,
-    required this.createdAt,
     this.isRead = false,
+    required this.createdAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -32,8 +32,8 @@ class NotificationModel {
       'userId': userId,
       'taskId': taskId,
       'senderId': senderId,
-      'createdAt': Timestamp.fromDate(createdAt),
       'isRead': isRead,
+      'createdAt': Timestamp.fromDate(createdAt),
     };
   }
 
@@ -46,8 +46,8 @@ class NotificationModel {
       userId: map['userId'] as String,
       taskId: map['taskId'] as String?,
       senderId: map['senderId'] as String?,
-      createdAt: (map['createdAt'] as Timestamp).toDate(),
       isRead: map['isRead'] as bool? ?? false,
+      createdAt: (map['createdAt'] as Timestamp).toDate(),
     );
   }
 
@@ -59,8 +59,8 @@ class NotificationModel {
     String? userId,
     String? taskId,
     String? senderId,
-    DateTime? createdAt,
     bool? isRead,
+    DateTime? createdAt,
   }) {
     return NotificationModel(
       id: id ?? this.id,
@@ -70,18 +70,20 @@ class NotificationModel {
       userId: userId ?? this.userId,
       taskId: taskId ?? this.taskId,
       senderId: senderId ?? this.senderId,
-      createdAt: createdAt ?? this.createdAt,
       isRead: isRead ?? this.isRead,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 
-  // Bildirim türleri
+  // Bildirim tipleri
   static const String typeTaskAssigned = 'task_assigned';
   static const String typeTaskUpdated = 'task_updated';
-  static const String typeCommentAdded = 'comment_added';
   static const String typeTaskCompleted = 'task_completed';
   static const String typeTaskOverdue = 'task_overdue';
   static const String typeTaskReminder = 'task_reminder';
+  static const String typeTaskComment = 'task_comment';
+  static const String typeTaskStatusChanged = 'task_status_changed';
+  static const String typeTaskRemoved = 'task_removed';
   static const String typeMeetingInvite = 'meeting_invite';
   static const String typeMeetingUpdate = 'meeting_update';
   static const String typeMeetingCancelled = 'meeting_cancelled';
@@ -90,22 +92,28 @@ class NotificationModel {
   static const String typeMeetingAgenda = 'meeting_agenda';
   static const String typeMeetingStatus = 'meeting_status';
   static const String typeMeetingRemoved = 'meeting_removed';
+  static const String typeMeetingMinutes = 'meeting_minutes';
+  static const String typeMeetingDecision = 'meeting_decision';
+  static const String typeMeetingDecisionOverdue = 'meeting_decision_overdue';
 
-  // Bildirim başlıkları
   static String getTitle(String type) {
     switch (type) {
       case typeTaskAssigned:
         return 'Yeni Görev Atandı';
       case typeTaskUpdated:
         return 'Görev Güncellendi';
-      case typeCommentAdded:
-        return 'Yeni Yorum';
       case typeTaskCompleted:
         return 'Görev Tamamlandı';
       case typeTaskOverdue:
-        return 'Geciken Görev';
+        return 'Görev Gecikti';
       case typeTaskReminder:
         return 'Görev Hatırlatması';
+      case typeTaskComment:
+        return 'Yeni Görev Yorumu';
+      case typeTaskStatusChanged:
+        return 'Görev Durumu Değişti';
+      case typeTaskRemoved:
+        return 'Görevden Çıkarıldınız';
       case typeMeetingInvite:
         return 'Yeni Toplantı Daveti';
       case typeMeetingUpdate:
@@ -122,6 +130,12 @@ class NotificationModel {
         return 'Toplantı Durumu';
       case typeMeetingRemoved:
         return 'Toplantıdan Çıkarıldınız';
+      case typeMeetingMinutes:
+        return 'Toplantı Tutanağı';
+      case typeMeetingDecision:
+        return 'Toplantı Kararı';
+      case typeMeetingDecisionOverdue:
+        return 'Toplantı Kararı Gecikti';
       default:
         return 'Bildirim';
     }
