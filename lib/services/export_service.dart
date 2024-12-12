@@ -2,14 +2,14 @@ import 'dart:io';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:excel/excel.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import '../models/task_model.dart';
 import '../models/meeting_model.dart';
 import '../models/report_model.dart';
 import '../models/meeting_report_model.dart';
 import '../constants/app_constants.dart';
+import '../utils/file_helper.dart';
+import '../utils/export_helper.dart';
 
 class ExportService {
   // PDF Oluşturma
@@ -21,90 +21,96 @@ class ExportService {
     Map<String, double>? columnWidths,
     List<Map<String, dynamic>>? charts,
   }) async {
-    final pdf = pw.Document();
+    try {
+      final pdf = pw.Document();
 
-    // Başlık ve açıklama
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        build: (context) => [
-          pw.Header(
-            level: 0,
-            child: pw.Text(
-              title,
-              style: pw.TextStyle(
-                fontSize: 24,
-                fontWeight: pw.FontWeight.bold,
-              ),
-            ),
-          ),
-          pw.Paragraph(text: description),
-          pw.SizedBox(height: 20),
-          if (data.isNotEmpty)
-            pw.Table.fromTextArray(
-              context: context,
-              headers: columns,
-              data: data.map((row) {
-                return columns.map((col) => row[col]?.toString() ?? '').toList();
-              }).toList(),
-              columnWidths: columnWidths,
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-              headerDecoration: pw.BoxDecoration(
-                color: PdfColors.grey300,
-              ),
-              rowDecoration: pw.BoxDecoration(
-                border: pw.Border(
-                  bottom: pw.BorderSide(
-                    color: PdfColors.grey300,
-                    width: 0.5,
-                  ),
+      // Başlık ve açıklama
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          build: (context) => [
+            pw.Header(
+              level: 0,
+              child: pw.Text(
+                title,
+                style: pw.TextStyle(
+                  fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
                 ),
               ),
-              cellAlignment: pw.Alignment.centerLeft,
-              cellPadding: pw.EdgeInsets.all(5),
             ),
-          if (charts != null && charts.isNotEmpty) ...[
+            pw.Paragraph(text: description),
             pw.SizedBox(height: 20),
-            ...charts.map((chart) {
-              // Grafik verilerini PDF'e ekle
-              return pw.Container(
-                height: 200,
-                child: pw.Chart(
-                  grid: pw.CartesianGrid(
-                    xAxis: pw.FixedAxis([0, 1, 2, 3, 4, 5]),
-                    yAxis: pw.FixedAxis([0, 20, 40, 60, 80, 100]),
+            if (data.isNotEmpty)
+              pw.Table.fromTextArray(
+                context: context,
+                headers: columns,
+                data: data.map((row) {
+                  return columns.map((col) => row[col]?.toString() ?? '').toList();
+                }).toList(),
+                columnWidths: columnWidths,
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                headerDecoration: pw.BoxDecoration(
+                  color: PdfColors.grey300,
+                ),
+                rowDecoration: pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(
+                      color: PdfColors.grey300,
+                      width: 0.5,
+                    ),
                   ),
-                  datasets: [
-                    pw.LineDataSet(
-                      data: List<pw.PointChartValue>.from(
-                        chart['data'].map(
-                          (point) => pw.PointChartValue(
-                            point['x'].toDouble(),
-                            point['y'].toDouble(),
+                ),
+                cellAlignment: pw.Alignment.centerLeft,
+                cellPadding: pw.EdgeInsets.all(5),
+              ),
+            if (charts != null && charts.isNotEmpty) ...[
+              pw.SizedBox(height: 20),
+              ...charts.map((chart) {
+                return pw.Container(
+                  height: 200,
+                  child: pw.Chart(
+                    grid: pw.CartesianGrid(
+                      xAxis: pw.FixedAxis([0, 1, 2, 3, 4, 5]),
+                      yAxis: pw.FixedAxis([0, 20, 40, 60, 80, 100]),
+                    ),
+                    datasets: [
+                      pw.LineDataSet(
+                        data: List<pw.PointChartValue>.from(
+                          chart['data'].map(
+                            (point) => pw.PointChartValue(
+                              point['x'].toDouble(),
+                              point['y'].toDouble(),
+                            ),
                           ),
                         ),
+                        legend: chart['title'],
+                        drawPoints: true,
+                        isCurved: true,
+                        color: PdfColors.blue,
                       ),
-                      legend: chart['title'],
-                      drawPoints: true,
-                      isCurved: true,
-                      color: PdfColors.blue,
-                    ),
-                  ],
-                ),
-              );
-            }),
+                    ],
+                  ),
+                );
+              }),
+            ],
           ],
-        ],
-      ),
-    );
+        ),
+      );
 
-    // PDF dosyasını kaydet
-    final output = await getTemporaryDirectory();
-    final file = File(
-      '${output.path}/${title.toLowerCase().replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.pdf',
-    );
-    await file.writeAsBytes(await pdf.save());
-    return file;
+      // PDF dosyasını kaydet
+      final file = await FileHelper.createTempFile(title, 'pdf');
+      await file.writeAsBytes(await pdf.save());
+
+      // Dosya kontrolü
+      if (!await FileHelper.checkFileSize(file)) {
+        throw Exception('PDF dosyası çok büyük');
+      }
+
+      return file;
+    } catch (e) {
+      throw Exception('PDF oluşturulurken hata: ${e.toString()}');
+    }
   }
 
   // Excel Oluşturma
@@ -114,39 +120,52 @@ class ExportService {
     required List<String> columns,
     Map<String, String>? columnTitles,
   }) async {
-    final excel = Excel.createExcel();
-    final sheet = excel[title];
+    try {
+      final excel = Excel.createExcel();
+      final sheet = excel[title];
 
-    // Başlıkları ekle
-    for (var i = 0; i < columns.length; i++) {
-      sheet
-          .cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0))
-          .value = columnTitles?[columns[i]] ?? columns[i];
-    }
-
-    // Verileri ekle
-    for (var i = 0; i < data.length; i++) {
-      for (var j = 0; j < columns.length; j++) {
+      // Başlıkları ekle
+      for (var i = 0; i < columns.length; i++) {
         sheet
-            .cell(CellIndex.indexByColumnRow(columnIndex: j, rowIndex: i + 1))
-            .value = data[i][columns[j]]?.toString() ?? '';
+            .cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0))
+            .value = columnTitles?[columns[i]] ?? columns[i];
       }
-    }
 
-    // Excel dosyasını kaydet
-    final output = await getTemporaryDirectory();
-    final file = File(
-      '${output.path}/${title.toLowerCase().replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.xlsx',
-    );
-    await file.writeAsBytes(excel.encode()!);
-    return file;
+      // Verileri ekle
+      for (var i = 0; i < data.length; i++) {
+        for (var j = 0; j < columns.length; j++) {
+          sheet
+              .cell(CellIndex.indexByColumnRow(columnIndex: j, rowIndex: i + 1))
+              .value = data[i][columns[j]]?.toString() ?? '';
+        }
+      }
+
+      // Excel dosyasını kaydet
+      final file = await FileHelper.createTempFile(title, 'xlsx');
+      await file.writeAsBytes(excel.encode()!);
+
+      // Dosya kontrolü
+      if (!await FileHelper.checkFileSize(file)) {
+        throw Exception('Excel dosyası çok büyük');
+      }
+
+      return file;
+    } catch (e) {
+      throw Exception('Excel oluşturulurken hata: ${e.toString()}');
+    }
   }
 
   // Görev listesini dışa aktar
-  Future<void> exportTasks(List<TaskModel> tasks, String format) async {
+  Future<ExportHelper.ExportResult> exportTasks(
+    List<TaskModel> tasks,
+    String format,
+  ) async {
     try {
       if (tasks.isEmpty) {
-        throw Exception('Dışa aktarılacak görev bulunamadı');
+        return ExportHelper.ExportResult(
+          status: ExportHelper.statusError,
+          message: 'Dışa aktarılacak görev bulunamadı',
+        );
       }
 
       final data = tasks.map((task) {
@@ -207,11 +226,45 @@ class ExportService {
         );
       }
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        subject: 'Görev Listesi',
+      return ExportHelper.ExportResult(
+        status: ExportHelper.statusSuccess,
+        file: file,
       );
     } catch (e) {
+      return ExportHelper.ExportResult(
+        status: ExportHelper.statusError,
+        message: e.toString(),
+      );
+    }
+  }
+
+  // Toplantı listesini dışa aktar
+  Future<ExportHelper.ExportResult> exportMeetings(
+    List<MeetingModel> meetings,
+    String format,
+  ) async {
+    try {
+      if (meetings.isEmpty) {
+        return ExportHelper.ExportResult(
+          status: ExportHelper.statusError,
+          message: 'Dışa aktarılacak toplantı bulunamadı',
+        );
+      }
+
+      final data = meetings.map((meeting) {
+        return {
+          'title': meeting.title,
+          'description': meeting.description,
+          'status': AppConstants.statusLabels[meeting.status],
+          'startTime': DateFormat('dd/MM/yyyy HH:mm').format(meeting.startTime),
+          'endTime': DateFormat('dd/MM/yyyy HH:mm').format(meeting.endTime),
+          'location': meeting.isOnline
+              ? '${meeting.meetingPlatform} (Online)'
+              : meeting.location,
+          'organizer': meeting.organizerId,
+        };
+      }).toList();
+
     final data = tasks.map((task) {
       return {
         'title': task.title,

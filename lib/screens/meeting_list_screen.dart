@@ -7,6 +7,7 @@ import '../constants/app_theme.dart';
 import 'create_meeting_screen.dart';
 import 'meeting_detail_screen.dart';
 import '../services/export_service.dart';
+import '../utils/export_helper.dart';
 
 class MeetingListScreen extends StatefulWidget {
   const MeetingListScreen({super.key});
@@ -287,19 +288,52 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
       Navigator.pop(context); // Dialog'u kapat
 
       // Yükleme göstergesi
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      await ExportHelper.showLoadingDialog(context);
 
       final exportService = Provider.of<ExportService>(
         context,
         listen: false,
       );
 
-      await exportService.exportMeetings(_meetings, format);
+      // Dışa aktar
+      final result = await exportService.exportMeetings(_meetings, format);
 
+      // Yükleme göstergesini kapat
+      if (mounted) Navigator.pop(context);
+
+      if (!mounted) return;
+
+      if (result.isSuccess && result.file != null) {
+        // Dosyayı paylaş
+        final shareResult = await ExportHelper.shareFile(
+          result.file!,
+          subject: 'Toplantı Listesi',
+        );
+
+        if (shareResult.isSuccess) {
+          ExportHelper.showSuccessSnackbar(context);
+        } else if (shareResult.isCancelled) {
+          ExportHelper.showCancelledSnackbar(context);
+        } else {
+          ExportHelper.showErrorDialog(
+            context,
+            shareResult.message ?? 'Bilinmeyen hata',
+          );
+        }
+      } else {
+        ExportHelper.showErrorDialog(
+          context,
+          result.message ?? 'Bilinmeyen hata',
+        );
+      }
+    } catch (e) {
+      // Yükleme göstergesini kapat
+      if (mounted) Navigator.pop(context);
+      
+      ExportHelper.showErrorDialog(
+        context,
+        e.toString(),
+      );
+    }
+  }
 } 

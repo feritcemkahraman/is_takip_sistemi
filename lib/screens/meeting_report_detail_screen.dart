@@ -5,6 +5,7 @@ import '../services/meeting_report_service.dart';
 import '../constants/app_theme.dart';
 import 'package:provider/provider.dart';
 import '../services/export_service.dart';
+import '../utils/export_helper.dart';
 
 class MeetingReportDetailScreen extends StatefulWidget {
   final String reportId;
@@ -354,29 +355,73 @@ class _MeetingReportDetailScreenState extends State<MeetingReportDetailScreen> {
               leading: const Icon(Icons.picture_as_pdf),
               title: const Text('PDF olarak dışa aktar'),
               onTap: () async {
-                Navigator.pop(context);
-                final exportService = Provider.of<ExportService>(
-                  context,
-                  listen: false,
-                );
-                await exportService.exportMeetingReport(widget.report, 'pdf');
+                await _exportMeetingReport(context, 'pdf');
               },
             ),
             ListTile(
               leading: const Icon(Icons.table_chart),
               title: const Text('Excel olarak dışa aktar'),
               onTap: () async {
-                Navigator.pop(context);
-                final exportService = Provider.of<ExportService>(
-                  context,
-                  listen: false,
-                );
-                await exportService.exportMeetingReport(widget.report, 'excel');
+                await _exportMeetingReport(context, 'excel');
               },
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _exportMeetingReport(BuildContext context, String format) async {
+    try {
+      Navigator.pop(context); // Dialog'u kapat
+
+      // Yükleme göstergesi
+      await ExportHelper.showLoadingDialog(context);
+
+      final exportService = Provider.of<ExportService>(
+        context,
+        listen: false,
+      );
+
+      // Dışa aktar
+      final result = await exportService.exportMeetingReport(widget.report, format);
+
+      // Yükleme göstergesini kapat
+      if (mounted) Navigator.pop(context);
+
+      if (!mounted) return;
+
+      if (result.isSuccess && result.file != null) {
+        // Dosyayı paylaş
+        final shareResult = await ExportHelper.shareFile(
+          result.file!,
+          subject: widget.report.title,
+        );
+
+        if (shareResult.isSuccess) {
+          ExportHelper.showSuccessSnackbar(context);
+        } else if (shareResult.isCancelled) {
+          ExportHelper.showCancelledSnackbar(context);
+        } else {
+          ExportHelper.showErrorDialog(
+            context,
+            shareResult.message ?? 'Bilinmeyen hata',
+          );
+        }
+      } else {
+        ExportHelper.showErrorDialog(
+          context,
+          result.message ?? 'Bilinmeyen hata',
+        );
+      }
+    } catch (e) {
+      // Yükleme göstergesini kapat
+      if (mounted) Navigator.pop(context);
+      
+      ExportHelper.showErrorDialog(
+        context,
+        e.toString(),
+      );
+    }
   }
 } 

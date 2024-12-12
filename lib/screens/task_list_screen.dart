@@ -8,6 +8,7 @@ import '../constants/app_theme.dart';
 import 'task_detail_screen.dart';
 import 'admin/create_task_screen.dart';
 import '../services/export_service.dart';
+import '../utils/export_helper.dart';
 
 class TaskListScreen extends StatefulWidget {
   const TaskListScreen({super.key});
@@ -283,42 +284,52 @@ class _TaskListScreenState extends State<TaskListScreen> {
       Navigator.pop(context); // Dialog'u kapat
 
       // Yükleme göstergesi
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      await ExportHelper.showLoadingDialog(context);
 
       final exportService = Provider.of<ExportService>(
         context,
         listen: false,
       );
 
-      await exportService.exportTasks(_tasks, format);
+      // Dışa aktar
+      final result = await exportService.exportTasks(_tasks, format);
 
       // Yükleme göstergesini kapat
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Dışa aktarma başarılı'),
-            backgroundColor: Colors.green,
-          ),
+      if (mounted) Navigator.pop(context);
+
+      if (!mounted) return;
+
+      if (result.isSuccess && result.file != null) {
+        // Dosyayı paylaş
+        final shareResult = await ExportHelper.shareFile(
+          result.file!,
+          subject: 'Görev Listesi',
+        );
+
+        if (shareResult.isSuccess) {
+          ExportHelper.showSuccessSnackbar(context);
+        } else if (shareResult.isCancelled) {
+          ExportHelper.showCancelledSnackbar(context);
+        } else {
+          ExportHelper.showErrorDialog(
+            context,
+            shareResult.message ?? 'Bilinmeyen hata',
+          );
+        }
+      } else {
+        ExportHelper.showErrorDialog(
+          context,
+          result.message ?? 'Bilinmeyen hata',
         );
       }
     } catch (e) {
       // Yükleme göstergesini kapat
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (mounted) Navigator.pop(context);
+      
+      ExportHelper.showErrorDialog(
+        context,
+        e.toString(),
+      );
     }
   }
 } 
