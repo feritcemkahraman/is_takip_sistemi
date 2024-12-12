@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../constants/app_constants.dart';
 import '../widgets/custom_text_field.dart';
 import '../widgets/custom_button.dart';
+import 'home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -43,9 +44,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
+
     if (_selectedDepartment.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lütfen bir departman seçin')),
+        const SnackBar(
+          content: Text('Lütfen bir departman seçin'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_passwordController.text != _confirmPasswordController.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppConstants.errorPasswordsDoNotMatch),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -57,16 +72,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await authService.registerWithUsername(
         name: _nameController.text.trim(),
         username: _usernameController.text.trim(),
-        password: _passwordController.text.trim(),
+        password: _passwordController.text,
         department: _selectedDepartment,
       );
-      if (mounted) {
-        Navigator.pop(context); // Return to login screen
-      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Kayıt işlemi başarılı! Giriş yapabilirsiniz.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
+        SnackBar(
+          content: Text('Kayıt hatası: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -106,7 +132,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (value == null || value.isEmpty) {
                       return AppConstants.errorRequiredField;
                     }
-                    // Kullanıcı adı formatı kontrolü
                     if (!RegExp(r'^[a-zA-Z0-9_.]+$').hasMatch(value)) {
                       return 'Kullanıcı adı sadece harf, rakam, nokta ve alt çizgi içerebilir';
                     }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
 import '../services/task_service.dart';
 import '../models/task_model.dart';
@@ -34,7 +33,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   Future<void> _loadCurrentUser() async {
-    final user = _authService.getCurrentUser();
+    final user = await _authService.getCurrentUserModel();
     if (user != null) {
       setState(() {
         _currentUserId = user.uid;

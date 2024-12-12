@@ -4,7 +4,7 @@ class AppConstants {
   static const String titleRegister = 'Kayıt Ol';
 
   // Collections
-  static const String usersCollection = 'users';
+  static const String usersCollection = 'han_users';
   static const String tasksCollection = 'tasks';
 
   // Labels

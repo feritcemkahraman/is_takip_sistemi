@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../constants/app_theme.dart';
 import '../services/auth_service.dart';
+import '../models/user_model.dart';
 
 class UserManagementScreen extends StatelessWidget {
   final _authService = AuthService();
@@ -16,18 +16,18 @@ class UserManagementScreen extends StatelessWidget {
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
       ),
-      body: StreamBuilder<QuerySnapshot>(
+      body: StreamBuilder<List<UserModel>>(
         stream: _authService.getAllUsers(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return const Center(child: Text('Bir hata oluştu'));
+            return Center(child: Text('Bir hata oluştu: ${snapshot.error}'));
           }
 
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final users = snapshot.data!.docs;
+          final users = snapshot.data ?? [];
 
           if (users.isEmpty) {
             return const Center(
@@ -38,8 +38,7 @@ class UserManagementScreen extends StatelessWidget {
           return ListView.builder(
             itemCount: users.length,
             itemBuilder: (context, index) {
-              final userData = users[index].data() as Map<String, dynamic>;
-              final userId = users[index].id;
+              final user = users[index];
               return Card(
                 margin: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -47,7 +46,7 @@ class UserManagementScreen extends StatelessWidget {
                 ),
                 child: ListTile(
                   title: Text(
-                    userData['name'] ?? '',
+                    user.name,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                     ),
@@ -55,10 +54,10 @@ class UserManagementScreen extends StatelessWidget {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Kullanıcı Adı: ${userData['username'] ?? ''}'),
-                      Text('Departman: ${userData['department'] ?? ''}'),
+                      Text('Kullanıcı Adı: ${user.username}'),
+                      Text('Departman: ${user.department}'),
                       Text(
-                        'Rol: ${userData['role'] == 'admin' ? 'Yönetici' : 'Çalışan'}',
+                        'Rol: ${user.role == 'admin' ? 'Yönetici' : 'Çalışan'}',
                       ),
                     ],
                   ),
@@ -68,19 +67,19 @@ class UserManagementScreen extends StatelessWidget {
                         switch (value) {
                           case 'toggle_status':
                             await _authService.updateUserStatus(
-                              userId,
-                              !(userData['isActive'] ?? true),
+                              user.uid,
+                              !user.isActive,
                             );
                             break;
                           case 'make_admin':
                             await _authService.updateUserRole(
-                              userId,
+                              user.uid,
                               'admin',
                             );
                             break;
                           case 'make_employee':
                             await _authService.updateUserRole(
-                              userId,
+                              user.uid,
                               'employee',
                             );
                             break;
@@ -98,17 +97,15 @@ class UserManagementScreen extends StatelessWidget {
                       PopupMenuItem(
                         value: 'toggle_status',
                         child: Text(
-                          userData['isActive'] == true
-                              ? 'Pasif Yap'
-                              : 'Aktif Yap',
+                          user.isActive ? 'Pasif Yap' : 'Aktif Yap',
                         ),
                       ),
                       PopupMenuItem(
-                        value: userData['role'] == 'admin'
+                        value: user.role == 'admin'
                             ? 'make_employee'
                             : 'make_admin',
                         child: Text(
-                          userData['role'] == 'admin'
+                          user.role == 'admin'
                               ? 'Çalışan Yap'
                               : 'Yönetici Yap',
                         ),

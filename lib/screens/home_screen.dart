@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import '../constants/app_theme.dart';
 import '../constants/app_constants.dart';
 import '../services/auth_service.dart';
+import '../models/user_model.dart';
 import 'login_screen.dart';
 import 'user_management_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  final Map<String, dynamic> userData;
+  final UserModel userData;
 
   const HomeScreen({
     Key? key,
@@ -34,62 +35,57 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isAdmin = widget.userData['role'] == AppConstants.roleAdmin;
-    final String name = widget.userData['name'] ?? '';
-    final String department = widget.userData['department'] ?? '';
+    final bool isAdmin = widget.userData.role == AppConstants.roleAdmin;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'HAN Holding İş Takip Sistemi',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        title: Text('Hoş Geldiniz, ${widget.userData.name}'),
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
         actions: [
-          if (isAdmin)
-            IconButton(
-              icon: const Icon(Icons.people),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => UserManagementScreen(),
-                  ),
-                );
-              },
-            ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _logout,
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Hoş geldiniz, $name',
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.person),
+                title: Text(widget.userData.name),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Departman: ${widget.userData.department}'),
+                    Text('Rol: ${widget.userData.role == AppConstants.roleAdmin ? 'Yönetici' : 'Çalışan'}'),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Departman: $department',
-              style: const TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
+            if (isAdmin) ...[
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => UserManagementScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.people),
+                label: const Text('Kullanıcı Yönetimi'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            // Buraya görevler listesi eklenecek
+            ],
           ],
         ),
       ),
