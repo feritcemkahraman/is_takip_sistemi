@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../constants/app_theme.dart';
 import 'task_list_screen.dart';
+import 'meeting_list_screen.dart';
 import 'notification_screen.dart';
 import 'profile_screen.dart';
 
@@ -19,6 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Widget> _pages = [
     const TaskListScreen(),
+    const MeetingListScreen(),
     const NotificationScreen(),
     const ProfileScreen(),
   ];
@@ -66,6 +68,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icon(Icons.task),
                 label: 'Görevler',
               ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.meeting_room),
+                label: 'Toplantılar',
+              ),
               BottomNavigationBarItem(
                 icon: Stack(
                   children: [
@@ -105,6 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
             currentIndex: _selectedIndex,
             selectedItemColor: AppTheme.primaryColor,
             onTap: _onItemTapped,
+            type: BottomNavigationBarType.fixed,
           );
         },
       ),

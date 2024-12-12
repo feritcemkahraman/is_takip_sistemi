@@ -6,15 +6,21 @@ import 'services/task_service.dart';
 import 'services/notification_service.dart';
 import 'services/storage_service.dart';
 import 'services/report_service.dart';
+import 'services/meeting_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/task_list_screen.dart';
 import 'screens/report_list_screen.dart';
+import 'screens/meeting_list_screen.dart';
+import 'screens/meeting_detail_screen.dart';
+import 'screens/create_meeting_screen.dart';
+import 'screens/edit_meeting_screen.dart';
 import 'constants/app_theme.dart';
 import 'constants/app_constants.dart';
 import 'models/user_model.dart';
+import 'models/meeting_model.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +50,9 @@ class MyApp extends StatelessWidget {
         Provider<ReportService>(
           create: (_) => ReportService(),
         ),
+        Provider<MeetingService>(
+          create: (_) => MeetingService(),
+        ),
         StreamProvider(
           create: (context) => context.read<AuthService>().authStateChanges,
           initialData: null,
@@ -60,6 +69,23 @@ class MyApp extends StatelessWidget {
           '/admin': (context) => const AdminDashboard(),
           '/tasks': (context) => const TaskListScreen(),
           '/reports': (context) => const ReportListScreen(),
+          '/meetings': (context) => const MeetingListScreen(),
+          '/meetings/create': (context) => const CreateMeetingScreen(),
+        },
+        onGenerateRoute: (settings) {
+          if (settings.name == '/meetings/detail') {
+            final meeting = settings.arguments as MeetingModel;
+            return MaterialPageRoute(
+              builder: (context) => MeetingDetailScreen(meeting: meeting),
+            );
+          }
+          if (settings.name == '/meetings/edit') {
+            final meeting = settings.arguments as MeetingModel;
+            return MaterialPageRoute(
+              builder: (context) => EditMeetingScreen(meeting: meeting),
+            );
+          }
+          return null;
         },
       ),
     );

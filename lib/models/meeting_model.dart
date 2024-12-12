@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
 class MeetingParticipant {
   final String userId;
@@ -96,235 +97,14 @@ class MeetingModel {
   final String location;
   final bool isRecurring;
   final String? recurrencePattern;
+  final int? recurrenceInterval;
+  final List<int>? recurrenceWeekDays;
+  final String? recurrenceEndType;
+  final int? recurrenceOccurrences;
   final DateTime? recurrenceEndDate;
+  final String? parentMeetingId;
   final DateTime createdAt;
   final DateTime? lastUpdatedAt;
-
-  MeetingModel({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.startTime,
-    required this.endTime,
-    required this.organizerId,
-    required this.participants,
-    required this.departments,
-    this.agenda = const [],
-    this.attachments = const [],
-    this.notes = const [],
-    this.status = statusScheduled,
-    this.isOnline = false,
-    this.meetingPlatform,
-    this.meetingLink,
-    this.location = '',
-    this.isRecurring = false,
-    this.recurrencePattern,
-    this.recurrenceEndDate,
-    required this.createdAt,
-    this.lastUpdatedAt,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'title': title,
-      'description': description,
-      'startTime': Timestamp.fromDate(startTime),
-      'endTime': Timestamp.fromDate(endTime),
-      'organizerId': organizerId,
-      'participants': participants.map((p) => p.toMap()).toList(),
-      'departments': departments,
-      'agenda': agenda,
-      'attachments': attachments,
-      'notes': notes.map((n) => n.toMap()).toList(),
-      'status': status,
-      'isOnline': isOnline,
-      'meetingPlatform': meetingPlatform,
-      'meetingLink': meetingLink,
-      'location': location,
-      'isRecurring': isRecurring,
-      'recurrencePattern': recurrencePattern,
-      'recurrenceEndDate': recurrenceEndDate != null ? Timestamp.fromDate(recurrenceEndDate!) : null,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'lastUpdatedAt': lastUpdatedAt != null ? Timestamp.fromDate(lastUpdatedAt!) : null,
-    };
-  }
-
-  factory MeetingModel.fromMap(Map<String, dynamic> map) {
-    return MeetingModel(
-      id: map['id'] as String,
-      title: map['title'] as String,
-      description: map['description'] as String,
-      startTime: (map['startTime'] as Timestamp).toDate(),
-      endTime: (map['endTime'] as Timestamp).toDate(),
-      organizerId: map['organizerId'] as String,
-      participants: List<MeetingParticipant>.from(
-        (map['participants'] as List<dynamic>).map(
-          (x) => MeetingParticipant.fromMap(x as Map<String, dynamic>),
-        ),
-      ),
-      departments: List<String>.from(map['departments'] as List<dynamic>),
-      agenda: List<String>.from(map['agenda'] as List<dynamic>? ?? []),
-      attachments: List<String>.from(map['attachments'] as List<dynamic>? ?? []),
-      notes: List<MeetingNote>.from(
-        (map['notes'] as List<dynamic>? ?? []).map(
-          (x) => MeetingNote.fromMap(x as Map<String, dynamic>),
-        ),
-      ),
-      status: map['status'] as String? ?? statusScheduled,
-      isOnline: map['isOnline'] as bool? ?? false,
-      meetingPlatform: map['meetingPlatform'] as String?,
-      meetingLink: map['meetingLink'] as String?,
-      location: map['location'] as String? ?? '',
-      isRecurring: map['isRecurring'] as bool? ?? false,
-      recurrencePattern: map['recurrencePattern'] as String?,
-      recurrenceEndDate: (map['recurrenceEndDate'] as Timestamp?)?.toDate(),
-      createdAt: (map['createdAt'] as Timestamp).toDate(),
-      lastUpdatedAt: (map['lastUpdatedAt'] as Timestamp?)?.toDate(),
-    );
-  }
-
-  MeetingModel copyWith({
-    String? id,
-    String? title,
-    String? description,
-    DateTime? startTime,
-    DateTime? endTime,
-    String? organizerId,
-    List<MeetingParticipant>? participants,
-    List<String>? departments,
-    List<String>? agenda,
-    List<String>? attachments,
-    List<MeetingNote>? notes,
-    String? status,
-    bool? isOnline,
-    String? meetingPlatform,
-    String? meetingLink,
-    String? location,
-    bool? isRecurring,
-    String? recurrencePattern,
-    DateTime? recurrenceEndDate,
-    DateTime? createdAt,
-    DateTime? lastUpdatedAt,
-  }) {
-    return MeetingModel(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      description: description ?? this.description,
-      startTime: startTime ?? this.startTime,
-      endTime: endTime ?? this.endTime,
-      organizerId: organizerId ?? this.organizerId,
-      participants: participants ?? this.participants,
-      departments: departments ?? this.departments,
-      agenda: agenda ?? this.agenda,
-      attachments: attachments ?? this.attachments,
-      notes: notes ?? this.notes,
-      status: status ?? this.status,
-      isOnline: isOnline ?? this.isOnline,
-      meetingPlatform: meetingPlatform ?? this.meetingPlatform,
-      meetingLink: meetingLink ?? this.meetingLink,
-      location: location ?? this.location,
-      isRecurring: isRecurring ?? this.isRecurring,
-      recurrencePattern: recurrencePattern ?? this.recurrencePattern,
-      recurrenceEndDate: recurrenceEndDate ?? this.recurrenceEndDate,
-      createdAt: createdAt ?? this.createdAt,
-      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
-    );
-  }
-
-  // Toplantı durumları
-  static const String statusScheduled = 'scheduled';
-  static const String statusOngoing = 'ongoing';
-  static const String statusCompleted = 'completed';
-  static const String statusCancelled = 'cancelled';
-
-  static String getStatusTitle(String status) {
-    switch (status) {
-      case statusScheduled:
-        return 'Planlandı';
-      case statusOngoing:
-        return 'Devam Ediyor';
-      case statusCompleted:
-        return 'Tamamlandı';
-      case statusCancelled:
-        return 'İptal Edildi';
-      default:
-        return 'Bilinmiyor';
-    }
-  }
-
-  static Color getStatusColor(String status) {
-    switch (status) {
-      case statusScheduled:
-        return Colors.blue;
-      case statusOngoing:
-        return Colors.green;
-      case statusCompleted:
-        return Colors.purple;
-      case statusCancelled:
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  // Toplantı platformları
-  static const String platformZoom = 'zoom';
-  static const String platformMeet = 'meet';
-  static const String platformTeams = 'teams';
-  static const String platformSkype = 'skype';
-
-  static String getPlatformTitle(String platform) {
-    switch (platform) {
-      case platformZoom:
-        return 'Zoom';
-      case platformMeet:
-        return 'Google Meet';
-      case platformTeams:
-        return 'Microsoft Teams';
-      case platformSkype:
-        return 'Skype';
-      default:
-        return 'Diğer';
-    }
-  }
-
-  // Tekrarlama desenleri
-  static const String recurrenceDaily = 'daily';
-  static const String recurrenceWeekly = 'weekly';
-  static const String recurrenceMonthly = 'monthly';
-  static const String recurrenceCustom = 'custom';
-
-  // Tekrarlama günleri (haftalık tekrarlama için)
-  static const List<String> weekDays = [
-    'Pazartesi',
-    'Salı',
-    'Çarşamba',
-    'Perşembe',
-    'Cuma',
-    'Cumartesi',
-    'Pazar'
-  ];
-
-  // Tekrarlama aralığı tipleri
-  static const String intervalDaily = 'daily';
-  static const String intervalWeekly = 'weekly';
-  static const String intervalMonthly = 'monthly';
-
-  // Tekrarlama sonu tipleri
-  static const String endNever = 'never';
-  static const String endAfterOccurrences = 'after_occurrences';
-  static const String endOnDate = 'on_date';
-
-  // Tekrarlama ayarları
-  final bool isRecurring;
-  final String? recurrencePattern; // daily, weekly, monthly, custom
-  final int? recurrenceInterval; // Her X gün/hafta/ay
-  final List<int>? recurrenceWeekDays; // Haftanın hangi günleri (1-7)
-  final String? recurrenceEndType; // never, after_occurrences, on_date
-  final int? recurrenceOccurrences; // Kaç kez tekrarlanacak
-  final DateTime? recurrenceEndDate; // Hangi tarihe kadar tekrarlanacak
-  final String? parentMeetingId; // Tekrarlayan toplantı serisi ID'si
 
   MeetingModel({
     required this.id,
@@ -487,6 +267,90 @@ class MeetingModel {
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
     );
   }
+
+  // Toplantı durumları
+  static const String statusScheduled = 'scheduled';
+  static const String statusOngoing = 'ongoing';
+  static const String statusCompleted = 'completed';
+  static const String statusCancelled = 'cancelled';
+
+  static String getStatusTitle(String status) {
+    switch (status) {
+      case statusScheduled:
+        return 'Planlandı';
+      case statusOngoing:
+        return 'Devam Ediyor';
+      case statusCompleted:
+        return 'Tamamlandı';
+      case statusCancelled:
+        return 'İptal Edildi';
+      default:
+        return 'Bilinmiyor';
+    }
+  }
+
+  static Color getStatusColor(String status) {
+    switch (status) {
+      case statusScheduled:
+        return Colors.blue;
+      case statusOngoing:
+        return Colors.green;
+      case statusCompleted:
+        return Colors.purple;
+      case statusCancelled:
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  // Toplantı platformları
+  static const String platformZoom = 'zoom';
+  static const String platformMeet = 'meet';
+  static const String platformTeams = 'teams';
+  static const String platformSkype = 'skype';
+
+  static String getPlatformTitle(String platform) {
+    switch (platform) {
+      case platformZoom:
+        return 'Zoom';
+      case platformMeet:
+        return 'Google Meet';
+      case platformTeams:
+        return 'Microsoft Teams';
+      case platformSkype:
+        return 'Skype';
+      default:
+        return 'Diğer';
+    }
+  }
+
+  // Tekrarlama desenleri
+  static const String recurrenceDaily = 'daily';
+  static const String recurrenceWeekly = 'weekly';
+  static const String recurrenceMonthly = 'monthly';
+  static const String recurrenceCustom = 'custom';
+
+  // Tekrarlama günleri (haftalık tekrarlama için)
+  static const List<String> weekDays = [
+    'Pazartesi',
+    'Salı',
+    'Çarşamba',
+    'Perşembe',
+    'Cuma',
+    'Cumartesi',
+    'Pazar'
+  ];
+
+  // Tekrarlama aralığı tipleri
+  static const String intervalDaily = 'daily';
+  static const String intervalWeekly = 'weekly';
+  static const String intervalMonthly = 'monthly';
+
+  // Tekrarlama sonu tipleri
+  static const String endNever = 'never';
+  static const String endAfterOccurrences = 'after_occurrences';
+  static const String endOnDate = 'on_date';
 
   // Tekrarlama başlıkları
   static String getRecurrenceTitle(String pattern) {

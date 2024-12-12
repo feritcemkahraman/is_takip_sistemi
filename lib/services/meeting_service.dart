@@ -15,6 +15,11 @@ class MeetingService {
     final docRef = _meetingsRef.doc(meeting.id);
     await docRef.set(meeting.toMap());
 
+    // Tekrarlayan toplantı ise seriyi oluştur
+    if (meeting.isRecurring) {
+      await createRecurringMeetings(meeting);
+    }
+
     // Katılımcılara bildirim gönder
     for (final participant in meeting.participants) {
       await _notificationService.createNotification(
@@ -32,6 +37,11 @@ class MeetingService {
   Future<void> updateMeeting(MeetingModel meeting) async {
     final docRef = _meetingsRef.doc(meeting.id);
     await docRef.update(meeting.toMap());
+
+    // Tekrarlayan toplantı serisini güncelle
+    if (meeting.parentMeetingId != null) {
+      await updateRecurringMeetings(meeting.parentMeetingId!, meeting);
+    }
 
     // Katılımcılara bildirim gönder
     for (final participant in meeting.participants) {
@@ -54,6 +64,11 @@ class MeetingService {
     if (meeting.exists) {
       final meetingData = meeting.data() as Map<String, dynamic>;
       final meetingModel = MeetingModel.fromMap(meetingData);
+
+      // Tekrarlayan toplantı serisini iptal et
+      if (meetingModel.parentMeetingId != null) {
+        await cancelRecurringMeetings(meetingModel.parentMeetingId!);
+      }
 
       // Katılımcılara bildirim gönder
       for (final participant in meetingModel.participants) {
@@ -226,236 +241,40 @@ class MeetingService {
         .where('participants', arrayContains: {'userId': userId})
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => MeetingModel.fromMap(doc.data()))
+            .map((doc) => MeetingModel.fromMap(doc.data() as Map<String, dynamic>))
             .toList());
-  }
-
-  // Departman toplantılarını getir
-  Stream<List<MeetingModel>> getDepartmentMeetings(String department) {
-    return _firestore
-        .collection(_collection)
-        .where('departments', arrayContains: department)
-        .orderBy('startTime', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => MeetingModel.fromMap(doc.data()))
-            .toList());
-  }
-
-  // Toplantı notu ekle
-  Future<void> addNote(String meetingId, MeetingNote note) async {
-    try {
-      final meeting = await getMeeting(meetingId);
-      final updatedNotes = [...meeting.notes, note];
-      
-      await _firestore.collection(_collection).doc(meetingId).update({
-        'notes': updatedNotes.map((note) => note.toMap()).toList(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      // Katılımcılara bildirim gönder
-      for (final participantId in meeting.participants) {
-        if (participantId != note.createdBy) {
-          await _notificationService.createNotification(
-            title: 'Yeni Toplantı Notu',
-            message: '${meeting.title} toplantısına yeni bir not eklendi',
-            type: NotificationModel.typeMeetingNote,
-            userId: participantId,
-          );
-        }
-      }
-    } catch (e) {
-      throw 'Not eklenirken bir hata oluştu: $e';
-    }
-  }
-
-  // Katılımcı ekle
-  Future<void> addParticipant(String meetingId, String userId) async {
-    try {
-      final meeting = await getMeeting(meetingId);
-      if (meeting.participants.contains(userId)) return;
-
-      await _firestore.collection(_collection).doc(meetingId).update({
-        'participants': FieldValue.arrayUnion([userId]),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      // Yeni katılımcıya bildirim gönder
-      await _notificationService.createNotification(
-        title: 'Yeni Toplantı Daveti',
-        message: '${meeting.title} toplantısına davet edildiniz',
-        type: NotificationModel.typeMeetingInvite,
-        userId: userId,
-      );
-    } catch (e) {
-      throw 'Katılımcı eklenirken bir hata oluştu: $e';
-    }
-  }
-
-  // Katılımcı çıkar
-  Future<void> removeParticipant(String meetingId, String userId) async {
-    try {
-      final meeting = await getMeeting(meetingId);
-      await _firestore.collection(_collection).doc(meetingId).update({
-        'participants': FieldValue.arrayRemove([userId]),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      // Çıkarılan katılımcıya bildirim gönder
-      await _notificationService.createNotification(
-        title: 'Toplantı Bilgisi',
-        message: '${meeting.title} toplantısından çıkarıldınız',
-        type: NotificationModel.typeMeetingRemoved,
-        userId: userId,
-      );
-    } catch (e) {
-      throw 'Katılımcı çıkarılırken bir hata oluştu: $e';
-    }
-  }
-
-  // Katılım durumunu güncelle
-  Future<void> updateAttendance(
-    String meetingId,
-    String userId,
-    bool attended,
-  ) async {
-    try {
-      await _firestore.collection(_collection).doc(meetingId).update({
-        'attendance.$userId': attended,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      throw 'Katılım durumu güncellenirken bir hata oluştu: $e';
-    }
-  }
-
-  // Gündem maddesi ekle
-  Future<void> addAgendaItem(String meetingId, MeetingAgendaItem item) async {
-    try {
-      final meeting = await getMeeting(meetingId);
-      final updatedAgenda = [...meeting.agenda, item];
-      
-      await _firestore.collection(_collection).doc(meetingId).update({
-        'agenda': updatedAgenda.map((item) => item.toMap()).toList(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      // Katılımcılara bildirim gönder
-      for (final participantId in meeting.participants) {
-        await _notificationService.createNotification(
-          title: 'Yeni Gündem Maddesi',
-          message: '${meeting.title} toplantısına yeni bir gündem maddesi eklendi',
-          type: NotificationModel.typeMeetingAgenda,
-          userId: participantId,
-        );
-      }
-    } catch (e) {
-      throw 'Gündem maddesi eklenirken bir hata oluştu: $e';
-    }
-  }
-
-  // Gündem maddesi güncelle
-  Future<void> updateAgendaItem(
-    String meetingId,
-    MeetingAgendaItem item,
-  ) async {
-    try {
-      final meeting = await getMeeting(meetingId);
-      final updatedAgenda = meeting.agenda.map((agendaItem) {
-        return agendaItem.id == item.id ? item : agendaItem;
-      }).toList();
-
-      await _firestore.collection(_collection).doc(meetingId).update({
-        'agenda': updatedAgenda.map((item) => item.toMap()).toList(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      throw 'Gündem maddesi güncellenirken bir hata oluştu: $e';
-    }
-  }
-
-  // Toplantı durumunu güncelle
-  Future<void> updateStatus(String meetingId, String status) async {
-    try {
-      final meeting = await getMeeting(meetingId);
-      await _firestore.collection(_collection).doc(meetingId).update({
-        'status': status,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      // Katılımcılara bildirim gönder
-      String message;
-      switch (status) {
-        case MeetingModel.statusOngoing:
-          message = '${meeting.title} toplantısı başladı';
-          break;
-        case MeetingModel.statusCompleted:
-          message = '${meeting.title} toplantısı tamamlandı';
-          break;
-        case MeetingModel.statusCancelled:
-          message = '${meeting.title} toplantısı iptal edildi';
-          break;
-        default:
-          message = '${meeting.title} toplantısının durumu güncellendi';
-      }
-
-      for (final participantId in meeting.participants) {
-        await _notificationService.createNotification(
-          title: 'Toplantı Durumu Güncellendi',
-          message: message,
-          type: NotificationModel.typeMeetingStatus,
-          userId: participantId,
-        );
-      }
-    } catch (e) {
-      throw 'Toplantı durumu güncellenirken bir hata oluştu: $e';
-    }
   }
 
   // Yaklaşan toplantıları getir
   Stream<List<MeetingModel>> getUpcomingMeetings(String userId) {
     final now = DateTime.now();
-    return _firestore
-        .collection(_collection)
-        .where('participants', arrayContains: userId)
-        .where('startTime', isGreaterThan: now)
+    return _meetingsRef
+        .where('participants', arrayContains: {'userId': userId})
+        .where('startTime', isGreaterThan: Timestamp.fromDate(now))
         .where('status', isEqualTo: MeetingModel.statusScheduled)
         .orderBy('startTime')
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => MeetingModel.fromMap(doc.data()))
+            .map((doc) => MeetingModel.fromMap(doc.data() as Map<String, dynamic>))
             .toList());
   }
 
-  // Toplantı hatırlatıcılarını kontrol et
-  Future<void> checkMeetingReminders() async {
-    try {
-      final now = DateTime.now();
-      final thirtyMinutesLater = now.add(const Duration(minutes: 30));
+  // Departman toplantılarını getir
+  Stream<List<MeetingModel>> getDepartmentMeetings(String department) {
+    return _meetingsRef
+        .where('departments', arrayContains: department)
+        .orderBy('startTime', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => MeetingModel.fromMap(doc.data() as Map<String, dynamic>))
+            .toList());
+  }
 
-      final meetings = await _firestore
-          .collection(_collection)
-          .where('startTime',
-              isGreaterThanOrEqualTo: now,
-              isLessThanOrEqualTo: thirtyMinutesLater)
-          .where('status', isEqualTo: MeetingModel.statusScheduled)
-          .get();
-
-      for (final doc in meetings.docs) {
-        final meeting = MeetingModel.fromMap(doc.data());
-        for (final participantId in meeting.participants) {
-          await _notificationService.createNotification(
-            title: 'Toplantı Hatırlatması',
-            message:
-                '${meeting.title} toplantısı ${meeting.startTime.difference(now).inMinutes} dakika sonra başlayacak',
-            type: NotificationModel.typeMeetingReminder,
-            userId: participantId,
-          );
-        }
-      }
-    } catch (e) {
-      print('Toplantı hatırlatıcıları kontrol edilirken hata: $e');
-    }
+  // Toplantı detaylarını getir
+  Future<MeetingModel?> getMeeting(String meetingId) async {
+    final doc = await _meetingsRef.doc(meetingId).get();
+    if (!doc.exists) return null;
+    return MeetingModel.fromMap(doc.data() as Map<String, dynamic>);
   }
 
   // Tekrarlayan toplantı serisi oluştur
@@ -482,7 +301,7 @@ class MeetingService {
       }
 
       // Yeni toplantı ID'si oluştur
-      final meetingId = _firestore.collection('meetings').doc().id;
+      final meetingId = _meetingsRef.doc().id;
       createdMeetingIds.add(meetingId);
 
       // Toplantı süresini hesapla
@@ -553,7 +372,7 @@ class MeetingService {
         'endTime': Timestamp.fromDate(
           meeting.startTime.add(duration),
         ),
-        'lastUpdatedAt': Timestamp.fromDate(DateTime.now()),
+        'lastUpdatedAt': FieldValue.serverTimestamp(),
       };
 
       await doc.reference.update(updatedFields);
@@ -584,7 +403,7 @@ class MeetingService {
 
       await doc.reference.update({
         'status': MeetingModel.statusCancelled,
-        'lastUpdatedAt': Timestamp.fromDate(DateTime.now()),
+        'lastUpdatedAt': FieldValue.serverTimestamp(),
       });
 
       // Katılımcılara bildirim gönder
@@ -610,7 +429,7 @@ class MeetingService {
 
     await doc.reference.update({
       'status': MeetingModel.statusCancelled,
-      'lastUpdatedAt': Timestamp.fromDate(DateTime.now()),
+      'lastUpdatedAt': FieldValue.serverTimestamp(),
     });
 
     // Katılımcılara bildirim gönder
