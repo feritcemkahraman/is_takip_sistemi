@@ -6,6 +6,7 @@ import '../models/meeting_model.dart';
 import '../constants/app_theme.dart';
 import 'create_meeting_screen.dart';
 import 'meeting_detail_screen.dart';
+import '../services/export_service.dart';
 
 class MeetingListScreen extends StatefulWidget {
   const MeetingListScreen({super.key});
@@ -35,14 +36,13 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            icon: const Icon(Icons.file_download),
+            onPressed: () => _showExportDialog(context),
+          ),
+          IconButton(
             icon: const Icon(Icons.add),
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CreateMeetingScreen(),
-                ),
-              );
+              Navigator.pushNamed(context, '/create_meeting');
             },
           ),
         ],
@@ -257,4 +257,49 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
       ),
     );
   }
+
+  void _showExportDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Dışa Aktar'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf),
+              title: const Text('PDF olarak dışa aktar'),
+              onTap: () => _exportMeetings(context, 'pdf'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.table_chart),
+              title: const Text('Excel olarak dışa aktar'),
+              onTap: () => _exportMeetings(context, 'excel'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportMeetings(BuildContext context, String format) async {
+    try {
+      Navigator.pop(context); // Dialog'u kapat
+
+      // Yükleme göstergesi
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      final exportService = Provider.of<ExportService>(
+        context,
+        listen: false,
+      );
+
+      await exportService.exportMeetings(_meetings, format);
+
 } 

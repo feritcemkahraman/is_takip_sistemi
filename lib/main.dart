@@ -23,6 +23,8 @@ import 'constants/app_constants.dart';
 import 'models/user_model.dart';
 import 'models/meeting_model.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'screens/search_screen.dart';
+import 'services/export_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,6 +45,8 @@ void main() async {
         Provider(create: (_) => MeetingService()),
         Provider(create: (_) => MeetingReportService()),
         Provider(create: (_) => CalendarService()),
+        Provider(create: (_) => SearchService()),
+        Provider(create: (_) => ExportService()),
       ],
       child: const MyApp(),
     ),
@@ -91,6 +95,7 @@ class MyApp extends StatelessWidget {
         ),
         '/meeting_report_list': (context) => const MeetingReportListScreen(),
         '/calendar': (context) => const CalendarScreen(),
+        '/search': (context) => const SearchScreen(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == '/meetings/detail') {

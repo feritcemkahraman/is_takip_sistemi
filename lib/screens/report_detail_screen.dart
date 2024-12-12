@@ -6,6 +6,7 @@ import '../services/report_service.dart';
 import '../services/auth_service.dart';
 import '../constants/app_theme.dart';
 import '../constants/app_constants.dart';
+import '../services/export_service.dart';
 
 class ReportDetailScreen extends StatelessWidget {
   final ReportModel report;
@@ -22,6 +23,12 @@ class ReportDetailScreen extends StatelessWidget {
         title: Text(report.title),
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.file_download),
+            onPressed: () => _showExportDialog(context),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -45,6 +52,44 @@ class ReportDetailScreen extends StatelessWidget {
             ],
             const SizedBox(height: 24),
             _buildTimelineChart(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showExportDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Dışa Aktar'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf),
+              title: const Text('PDF olarak dışa aktar'),
+              onTap: () async {
+                Navigator.pop(context);
+                final exportService = Provider.of<ExportService>(
+                  context,
+                  listen: false,
+                );
+                await exportService.exportReport(report, 'pdf');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.table_chart),
+              title: const Text('Excel olarak dışa aktar'),
+              onTap: () async {
+                Navigator.pop(context);
+                final exportService = Provider.of<ExportService>(
+                  context,
+                  listen: false,
+                );
+                await exportService.exportReport(report, 'excel');
+              },
+            ),
           ],
         ),
       ),

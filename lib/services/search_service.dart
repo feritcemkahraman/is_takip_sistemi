@@ -7,6 +7,47 @@ import '../models/user_model.dart';
 class SearchService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // Arama indeksini güncelle
+  Future<void> updateSearchIndex(String collectionName, String documentId, Map<String, dynamic> data) async {
+    final keywords = _generateKeywords(data);
+    await _firestore.collection(collectionName).doc(documentId).update({
+      'keywords': keywords,
+    });
+  }
+
+  // Anahtar kelimeleri oluştur
+  List<String> _generateKeywords(Map<String, dynamic> data) {
+    final Set<String> keywords = {};
+
+    void addKeywords(String text) {
+      if (text.isEmpty) return;
+
+      // Metni küçük harfe çevir ve noktalama işaretlerini kaldır
+      final cleanText = text.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '');
+
+      // Kelimeleri ayır
+      final words = cleanText.split(' ');
+
+      // Her kelimeyi ve alt dizilerini ekle
+      for (var word in words) {
+        if (word.length < 2) continue;
+        for (var i = 0; i < word.length; i++) {
+          keywords.add(word.substring(0, i + 1));
+        }
+        keywords.add(word);
+      }
+    }
+
+    // Başlık ve açıklama gibi metin alanlarını indeksle
+    if (data['title'] != null) addKeywords(data['title'] as String);
+    if (data['description'] != null) addKeywords(data['description'] as String);
+    if (data['name'] != null) addKeywords(data['name'] as String);
+    if (data['department'] != null) addKeywords(data['department'] as String);
+    if (data['email'] != null) addKeywords(data['email'] as String);
+
+    return keywords.toList();
+  }
+
   // Görevleri ara
   Future<SearchResult<TaskModel>> searchTasks(
     SearchFilter filter, {
@@ -17,7 +58,8 @@ class SearchService {
 
     // Metin araması
     if (filter.searchText != null && filter.searchText!.isNotEmpty) {
-      query = query.where('keywords', arrayContains: filter.searchText!.toLowerCase());
+      final searchTerms = _generateKeywords({'title': filter.searchText});
+      query = query.where('keywords', arrayContainsAny: searchTerms);
     }
 
     // Departman filtresi
@@ -240,8 +282,42 @@ class SearchService {
     );
   }
 
+  // Arama geçmişini getir
+  Stream<List<String>> getSearchHistory(String userId) {
+    final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+    
+    return _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('search_history')
+        .where('lastUsed', isGreaterThan: Timestamp.fromDate(thirtyDaysAgo))
+        .orderBy('lastUsed', descending: true)
+        .limit(10)
+        .snapshots()
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => doc.data()['text'] as String).toList());
+  }
+
+  // Eski arama geçmişini temizle
+  Future<void> cleanupOldSearchHistory(String userId) async {
+    final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+    
+    final oldSearches = await _firestore
+        .collection('users')
+        .doc(userId)
+        .collection('search_history')
+        .where('lastUsed', isLessThan: Timestamp.fromDate(thirtyDaysAgo))
+        .get();
+
+    for (var doc in oldSearches.docs) {
+      await doc.reference.delete();
+    }
+  }
+
   // Arama geçmişini kaydet
   Future<void> saveSearchHistory(String userId, String searchText) async {
+    if (searchText.trim().isEmpty) return;
+
     final searchHistory = _firestore
         .collection('users')
         .doc(userId)
@@ -279,19 +355,9 @@ class SearchService {
         }
       }
     }
-  }
 
-  // Arama geçmişini getir
-  Stream<List<String>> getSearchHistory(String userId) {
-    return _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('search_history')
-        .orderBy('lastUsed', descending: true)
-        .limit(10)
-        .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => doc.data()['text'] as String).toList());
+    // Eski aramaları temizle
+    await cleanupOldSearchHistory(userId);
   }
 
   // Arama geçmişini temizle

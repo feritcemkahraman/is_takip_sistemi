@@ -3,6 +3,8 @@ import 'package:fl_chart/fl_chart.dart';
 import '../models/meeting_report_model.dart';
 import '../services/meeting_report_service.dart';
 import '../constants/app_theme.dart';
+import 'package:provider/provider.dart';
+import '../services/export_service.dart';
 
 class MeetingReportDetailScreen extends StatefulWidget {
   final String reportId;
@@ -180,9 +182,13 @@ class _MeetingReportDetailScreenState extends State<MeetingReportDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Toplantı Raporu'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
+        title: Text(widget.report.title),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.file_download),
+            onPressed: () => _showExportDialog(context),
+          ),
+        ],
       ),
       body: FutureBuilder<MeetingReportModel>(
         future: _reportFuture,
@@ -332,6 +338,44 @@ class _MeetingReportDetailScreenState extends State<MeetingReportDetailScreen> {
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showExportDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Dışa Aktar'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf),
+              title: const Text('PDF olarak dışa aktar'),
+              onTap: () async {
+                Navigator.pop(context);
+                final exportService = Provider.of<ExportService>(
+                  context,
+                  listen: false,
+                );
+                await exportService.exportMeetingReport(widget.report, 'pdf');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.table_chart),
+              title: const Text('Excel olarak dışa aktar'),
+              onTap: () async {
+                Navigator.pop(context);
+                final exportService = Provider.of<ExportService>(
+                  context,
+                  listen: false,
+                );
+                await exportService.exportMeetingReport(widget.report, 'excel');
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

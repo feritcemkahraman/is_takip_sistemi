@@ -314,34 +314,107 @@ class _SearchScreenState extends State<SearchScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_searchResults.isEmpty) {
-      return const Center(child: Text('Sonuç bulunamadı'));
+    if (_searchResults.isEmpty && _searchController.text.isNotEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.search_off,
+              size: 64,
+              color: Colors.grey,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Sonuç bulunamadı: "${_searchController.text}"',
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
-    return ListView.builder(
-      controller: _scrollController,
-      itemCount: _searchResults.length + (_hasMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == _searchResults.length) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(8.0),
-              child: CircularProgressIndicator(),
+    if (_searchResults.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.search,
+              size: 64,
+              color: Colors.grey,
             ),
-          );
-        }
+            const SizedBox(height: 16),
+            const Text(
+              'Arama yapmak için yukarıdaki alanı kullanın',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
-        final item = _searchResults[index];
-        if (item is TaskModel) {
-          return TaskListItem(task: item);
-        } else if (item is MeetingModel) {
-          return MeetingListItem(meeting: item);
-        } else if (item is UserModel) {
-          return UserListItem(user: item);
-        }
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${_searchResults.length} sonuç bulundu',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (!_filter.isEmpty)
+                TextButton.icon(
+                  icon: const Icon(Icons.clear_all),
+                  label: const Text('Filtreleri Temizle'),
+                  onPressed: () {
+                    setState(() {
+                      _filter = SearchFilter();
+                    });
+                    _search();
+                  },
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            controller: _scrollController,
+            itemCount: _searchResults.length + (_hasMore ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index == _searchResults.length) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
 
-        return const SizedBox.shrink();
-      },
+              final item = _searchResults[index];
+              if (item is TaskModel) {
+                return TaskListItem(task: item);
+              } else if (item is MeetingModel) {
+                return MeetingListItem(meeting: item);
+              } else if (item is UserModel) {
+                return UserListItem(user: item);
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ],
     );
   }
 }

@@ -7,6 +7,7 @@ import '../constants/app_constants.dart';
 import '../constants/app_theme.dart';
 import 'task_detail_screen.dart';
 import 'admin/create_task_screen.dart';
+import '../services/export_service.dart';
 
 class TaskListScreen extends StatefulWidget {
   const TaskListScreen({super.key});
@@ -45,6 +46,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
                 );
               },
             ),
+          IconButton(
+            icon: const Icon(Icons.file_download),
+            onPressed: () => _showExportDialog(context),
+          ),
         ],
       ),
       body: Column(
@@ -247,5 +252,73 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
       return matchesStatus && matchesPriority && matchesSearch;
     }).toList();
+  }
+
+  void _showExportDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Dışa Aktar'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf),
+              title: const Text('PDF olarak dışa aktar'),
+              onTap: () => _exportTasks(context, 'pdf'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.table_chart),
+              title: const Text('Excel olarak dışa aktar'),
+              onTap: () => _exportTasks(context, 'excel'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportTasks(BuildContext context, String format) async {
+    try {
+      Navigator.pop(context); // Dialog'u kapat
+
+      // Yükleme göstergesi
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      final exportService = Provider.of<ExportService>(
+        context,
+        listen: false,
+      );
+
+      await exportService.exportTasks(_tasks, format);
+
+      // Yükleme göstergesini kapat
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Dışa aktarma başarılı'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      // Yükleme göstergesini kapat
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Hata: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 } 
