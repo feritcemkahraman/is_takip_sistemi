@@ -22,6 +22,7 @@ import 'constants/app_theme.dart';
 import 'constants/app_constants.dart';
 import 'models/user_model.dart';
 import 'models/meeting_model.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,96 +32,81 @@ void main() async {
   final meetingService = MeetingService();
   meetingService.startOverdueDecisionsCheck();
 
-  runApp(const MyApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthService()),
+        Provider(create: (_) => TaskService()),
+        Provider(create: (_) => NotificationService()),
+        Provider(create: (_) => StorageService()),
+        Provider(create: (_) => ReportService()),
+        Provider(create: (_) => MeetingService()),
+        Provider(create: (_) => MeetingReportService()),
+        Provider(create: (_) => CalendarService()),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  Timer? _reminderTimer;
-  final _meetingService = MeetingService();
-
-  @override
-  void initState() {
-    super.initState();
-    _startReminderTimer();
-  }
-
-  @override
-  void dispose() {
-    _reminderTimer?.cancel();
-    super.dispose();
-  }
-
-  void _startReminderTimer() {
-    // Her 5 dakikada bir hatırlatmaları kontrol et
-    _reminderTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
-      _meetingService.checkUpcomingReminders();
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        Provider<AuthService>(
-          create: (_) => AuthService(),
-        ),
-        Provider<TaskService>(
-          create: (_) => TaskService(),
-        ),
-        Provider<NotificationService>(
-          create: (_) => NotificationService(),
-        ),
-        Provider<StorageService>(
-          create: (_) => StorageService(),
-        ),
-        Provider<ReportService>(
-          create: (_) => ReportService(),
-        ),
-        Provider<MeetingService>(
-          create: (_) => _meetingService,
-        ),
-        StreamProvider(
-          create: (context) => context.read<AuthService>().authStateChanges,
-          initialData: null,
-        ),
-      ],
-      child: MaterialApp(
-        title: 'İş Takip Sistemi',
-        theme: AppTheme.lightTheme,
-        routes: {
-          '/': (context) => const AuthWrapper(),
-          '/login': (context) => const LoginScreen(),
-          '/register': (context) => const RegisterScreen(),
-          '/home': (context) => const HomeScreen(),
-          '/admin': (context) => const AdminDashboard(),
-          '/tasks': (context) => const TaskListScreen(),
-          '/reports': (context) => const ReportListScreen(),
-          '/meetings': (context) => const MeetingListScreen(),
-          '/meetings/create': (context) => const CreateMeetingScreen(),
-        },
-        onGenerateRoute: (settings) {
-          if (settings.name == '/meetings/detail') {
-            final meeting = settings.arguments as MeetingModel;
-            return MaterialPageRoute(
-              builder: (context) => MeetingDetailScreen(meeting: meeting),
-            );
-          }
-          if (settings.name == '/meetings/edit') {
-            final meeting = settings.arguments as MeetingModel;
-            return MaterialPageRoute(
-              builder: (context) => EditMeetingScreen(meeting: meeting),
-            );
-          }
-          return null;
-        },
+    return MaterialApp(
+      title: 'İş Takip Sistemi',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('tr', 'TR'),
+      ],
+      locale: const Locale('tr', 'TR'),
+      routes: {
+        '/': (context) => const HomeScreen(),
+        '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
+        '/admin_dashboard': (context) => const AdminDashboardScreen(),
+        '/create_task': (context) => const CreateTaskScreen(),
+        '/task_detail': (context) => TaskDetailScreen(
+          taskId: ModalRoute.of(context)!.settings.arguments as String,
+        ),
+        '/create_meeting': (context) => const CreateMeetingScreen(),
+        '/meeting_detail': (context) => MeetingDetailScreen(
+          meetingId: ModalRoute.of(context)!.settings.arguments as String,
+        ),
+        '/edit_meeting': (context) => EditMeetingScreen(
+          meetingId: ModalRoute.of(context)!.settings.arguments as String,
+        ),
+        '/create_meeting_report': (context) => const CreateMeetingReportScreen(),
+        '/meeting_report_detail': (context) => MeetingReportDetailScreen(
+          reportId: ModalRoute.of(context)!.settings.arguments as String,
+        ),
+        '/meeting_report_list': (context) => const MeetingReportListScreen(),
+        '/calendar': (context) => const CalendarScreen(),
+      },
+      onGenerateRoute: (settings) {
+        if (settings.name == '/meetings/detail') {
+          final meeting = settings.arguments as MeetingModel;
+          return MaterialPageRoute(
+            builder: (context) => MeetingDetailScreen(meeting: meeting),
+          );
+        }
+        if (settings.name == '/meetings/edit') {
+          final meeting = settings.arguments as MeetingModel;
+          return MaterialPageRoute(
+            builder: (context) => EditMeetingScreen(meeting: meeting),
+          );
+        }
+        return null;
+      },
     );
   }
 }

@@ -7,6 +7,7 @@ import 'task_list_screen.dart';
 import 'meeting_list_screen.dart';
 import 'notification_screen.dart';
 import 'profile_screen.dart';
+import 'calendar_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Widget> _pages = [
     const TaskListScreen(),
     const MeetingListScreen(),
+    const CalendarScreen(),
     const NotificationScreen(),
     const ProfileScreen(),
   ];
@@ -43,6 +45,12 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              Navigator.pushNamed(context, '/search');
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
@@ -71,6 +79,10 @@ class _HomeScreenState extends State<HomeScreen> {
               const BottomNavigationBarItem(
                 icon: Icon(Icons.meeting_room),
                 label: 'Toplantılar',
+              ),
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.calendar_today),
+                label: 'Takvim',
               ),
               BottomNavigationBarItem(
                 icon: Stack(

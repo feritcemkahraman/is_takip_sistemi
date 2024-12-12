@@ -115,4 +115,45 @@ class AppConstants {
   static const String successTaskDeleted = 'Görev başarıyla silindi';
   static const String successCommentAdded = 'Yorum başarıyla eklendi';
   static const String successFileUploaded = 'Dosya başarıyla yüklendi';
+
+  // Google Calendar API
+  static const String googleClientId = String.fromEnvironment(
+    'GOOGLE_CLIENT_ID',
+    defaultValue: '',
+  );
+  static const String googleClientSecret = String.fromEnvironment(
+    'GOOGLE_CLIENT_SECRET',
+    defaultValue: '',
+  );
+
+  // Takvim ayarları
+  static const List<String> calendarViews = [
+    'month',
+    'week',
+    'day',
+  ];
+
+  static const List<String> calendarViewTitles = [
+    'Aylık',
+    'Haftalık',
+    'Günlük',
+  ];
+
+  static const List<String> eventDurations = [
+    '30m',
+    '1h',
+    '2h',
+    '3h',
+    '4h',
+    'all_day',
+  ];
+
+  static const List<String> eventDurationTitles = [
+    '30 Dakika',
+    '1 Saat',
+    '2 Saat',
+    '3 Saat',
+    '4 Saat',
+    'Tüm Gün',
+  ];
 }

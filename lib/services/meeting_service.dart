@@ -273,4 +273,186 @@ class MeetingService {
       return true; // Sonsuz döngü
     });
   }
+
+  // Tekrarlayan toplantı serisi oluştur
+  Future<List<String>> createRecurringMeetings(MeetingModel meeting) async {
+    if (!meeting.isRecurring) {
+      throw Exception('Toplantı tekrarlayan olarak işaretlenmemiş');
+    }
+
+    final createdMeetingIds = <String>[];
+    DateTime currentDate = meeting.startTime;
+    int occurrenceCount = 0;
+
+    while (true) {
+      // Tekrarlama sonu kontrolü
+      if (meeting.isRecurrenceEnded(currentDate)) {
+        break;
+      }
+
+      // Tekrarlama sayısı kontrolü
+      if (meeting.recurrenceEndType == MeetingModel.endAfterOccurrences &&
+          meeting.recurrenceOccurrences != null &&
+          occurrenceCount >= meeting.recurrenceOccurrences!) {
+        break;
+      }
+
+      // Yeni toplantı ID'si oluştur
+      final meetingId = _firestore.collection('meetings').doc().id;
+      createdMeetingIds.add(meetingId);
+
+      // Toplantı süresini hesapla
+      final duration = meeting.endTime.difference(meeting.startTime);
+      final endDate = currentDate.add(duration);
+
+      // Yeni toplantı oluştur
+      final newMeeting = meeting.copyWith(
+        id: meetingId,
+        startTime: currentDate,
+        endTime: endDate,
+        parentMeetingId: meeting.id,
+        createdAt: DateTime.now(),
+      );
+
+      // Toplantıyı kaydet
+      await _firestore.collection('meetings').doc(meetingId).set(newMeeting.toMap());
+
+      // Katılımcılara bildirim gönder
+      for (final participant in meeting.participants) {
+        await _notificationService.createNotification(
+          title: NotificationModel.getTitle(NotificationModel.typeMeetingInvite),
+          message: '${meeting.title} toplantı serisine davet edildiniz.',
+          type: NotificationModel.typeMeetingInvite,
+          userId: participant.userId,
+          taskId: meetingId,
+          senderId: meeting.organizerId,
+        );
+      }
+
+      // Sonraki tarihi hesapla
+      final nextDate = meeting.getNextOccurrence(currentDate);
+      if (nextDate == null) break;
+
+      currentDate = nextDate;
+      occurrenceCount++;
+    }
+
+    return createdMeetingIds;
+  }
+
+  // Tekrarlayan toplantı serisini güncelle
+  Future<void> updateRecurringMeetings(
+    String parentMeetingId,
+    MeetingModel updatedMeeting,
+  ) async {
+    // Seri ID'sine sahip tüm toplantıları bul
+    final meetings = await _firestore
+        .collection('meetings')
+        .where('parentMeetingId', isEqualTo: parentMeetingId)
+        .where('startTime', isGreaterThanOrEqualTo: Timestamp.now())
+        .get();
+
+    // Gelecek toplantıları güncelle
+    for (final doc in meetings.docs) {
+      final meeting = MeetingModel.fromMap(doc.data());
+      final duration = updatedMeeting.endTime.difference(updatedMeeting.startTime);
+
+      final updatedFields = {
+        'title': updatedMeeting.title,
+        'description': updatedMeeting.description,
+        'participants': updatedMeeting.participants.map((p) => p.toMap()).toList(),
+        'departments': updatedMeeting.departments,
+        'agenda': updatedMeeting.agenda,
+        'isOnline': updatedMeeting.isOnline,
+        'meetingPlatform': updatedMeeting.meetingPlatform,
+        'meetingLink': updatedMeeting.meetingLink,
+        'location': updatedMeeting.location,
+        'endTime': Timestamp.fromDate(
+          meeting.startTime.add(duration),
+        ),
+        'lastUpdatedAt': FieldValue.serverTimestamp(),
+      };
+
+      await doc.reference.update(updatedFields);
+
+      // Katılımcılara bildirim gönder
+      for (final participant in updatedMeeting.participants) {
+        await _notificationService.createNotification(
+          title: NotificationModel.getTitle(NotificationModel.typeMeetingUpdate),
+          message: '${updatedMeeting.title} toplantı serisinde değişiklik yapıldı.',
+          type: NotificationModel.typeMeetingUpdate,
+          userId: participant.userId,
+          taskId: meeting.id,
+          senderId: updatedMeeting.organizerId,
+        );
+      }
+    }
+  }
+
+  // Tekrarlayan toplantı serisini iptal et
+  Future<void> cancelRecurringMeetings(String parentMeetingId) async {
+    final meetings = await _firestore
+        .collection('meetings')
+        .where('parentMeetingId', isEqualTo: parentMeetingId)
+        .where('startTime', isGreaterThanOrEqualTo: Timestamp.now())
+        .get();
+
+    for (final doc in meetings.docs) {
+      final meeting = MeetingModel.fromMap(doc.data());
+
+      await doc.reference.update({
+        'status': MeetingModel.statusCancelled,
+        'lastUpdatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Katılımcılara bildirim gönder
+      for (final participant in meeting.participants) {
+        await _notificationService.createNotification(
+          title: NotificationModel.getTitle(NotificationModel.typeMeetingCancelled),
+          message: '${meeting.title} toplantı serisi iptal edildi.',
+          type: NotificationModel.typeMeetingCancelled,
+          userId: participant.userId,
+          taskId: meeting.id,
+          senderId: meeting.organizerId,
+        );
+      }
+    }
+  }
+
+  // Tekrarlayan toplantı serisinden bir toplantıyı iptal et
+  Future<void> cancelSingleOccurrence(String meetingId) async {
+    final doc = await _firestore.collection('meetings').doc(meetingId).get();
+    if (!doc.exists) return;
+
+    final meeting = MeetingModel.fromMap(doc.data()!);
+
+    await doc.reference.update({
+      'status': MeetingModel.statusCancelled,
+      'lastUpdatedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Katılımcılara bildirim gönder
+    for (final participant in meeting.participants) {
+      await _notificationService.createNotification(
+        title: NotificationModel.getTitle(NotificationModel.typeMeetingCancelled),
+        message: '${meeting.title} toplantısı iptal edildi.',
+        type: NotificationModel.typeMeetingCancelled,
+        userId: participant.userId,
+        taskId: meetingId,
+        senderId: meeting.organizerId,
+      );
+    }
+  }
+
+  // Tekrarlayan toplantı serisinin tüm toplantılarını getir
+  Stream<List<MeetingModel>> getRecurringMeetings(String parentMeetingId) {
+    return _firestore
+        .collection('meetings')
+        .where('parentMeetingId', isEqualTo: parentMeetingId)
+        .orderBy('startTime')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => MeetingModel.fromMap(doc.data()))
+            .toList());
+  }
 } 

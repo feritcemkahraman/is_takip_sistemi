@@ -525,7 +525,7 @@ class MeetingModel {
   static const String recurrenceMonthly = 'monthly';
   static const String recurrenceCustom = 'custom';
 
-  // Tekrarlama günleri (haftalık tekrarlama için)
+  // Haftanın günleri
   static const List<String> weekDays = [
     'Pazartesi',
     'Salı',
@@ -535,11 +535,6 @@ class MeetingModel {
     'Cumartesi',
     'Pazar'
   ];
-
-  // Tekrarlama aralığı tipleri
-  static const String intervalDaily = 'daily';
-  static const String intervalWeekly = 'weekly';
-  static const String intervalMonthly = 'monthly';
 
   // Tekrarlama sonu tipleri
   static const String endNever = 'never';
@@ -562,123 +557,145 @@ class MeetingModel {
     }
   }
 
-  // Tekrarlama aralığı başlıkları
-  static String getIntervalTitle(String type, int interval) {
-    switch (type) {
-      case intervalDaily:
-        return interval == 1 ? 'Her gün' : 'Her $interval günde bir';
-      case intervalWeekly:
-        return interval == 1 ? 'Her hafta' : 'Her $interval haftada bir';
-      case intervalMonthly:
-        return interval == 1 ? 'Her ay' : 'Her $interval ayda bir';
+  // Sonraki tekrarlama tarihini hesapla
+  DateTime? getNextOccurrence(DateTime currentDate) {
+    if (!isRecurring) return null;
+
+    switch (recurrencePattern) {
+      case recurrenceDaily:
+        return currentDate.add(Duration(days: recurrenceInterval ?? 1));
+      
+      case recurrenceWeekly:
+        if (recurrenceWeekDays == null || recurrenceWeekDays!.isEmpty) {
+          return currentDate.add(Duration(days: (recurrenceInterval ?? 1) * 7));
+        }
+
+        // Sonraki uygun günü bul
+        var nextDate = currentDate.add(const Duration(days: 1));
+        while (!recurrenceWeekDays!.contains(nextDate.weekday)) {
+          nextDate = nextDate.add(const Duration(days: 1));
+        }
+        return nextDate;
+      
+      case recurrenceMonthly:
+        var nextDate = DateTime(
+          currentDate.year,
+          currentDate.month + (recurrenceInterval ?? 1),
+          currentDate.day,
+        );
+        
+        // Ay sonunu kontrol et
+        while (nextDate.month > currentDate.month + (recurrenceInterval ?? 1)) {
+          nextDate = nextDate.subtract(const Duration(days: 1));
+        }
+        return nextDate;
+      
       default:
-        return 'Bilinmeyen aralık';
+        return null;
     }
   }
 
-  // Tekrarlama sonu başlıkları
-  static String getEndTypeTitle(String endType) {
-    switch (endType) {
+  // Tekrarlama sonu kontrolü
+  bool isRecurrenceEnded(DateTime date) {
+    if (!isRecurring) return true;
+
+    switch (recurrenceEndType) {
       case endNever:
-        return 'Süresiz';
+        return false;
+      
       case endAfterOccurrences:
-        return 'Belirli sayıda tekrar sonra';
+        if (recurrenceOccurrences == null) return true;
+        final occurrenceCount = getOccurrenceCount(date);
+        return occurrenceCount >= recurrenceOccurrences!;
+      
       case endOnDate:
-        return 'Belirli bir tarihte';
+        if (recurrenceEndDate == null) return true;
+        return date.isAfter(recurrenceEndDate!);
+      
       default:
-        return 'Bilinmeyen son';
+        return true;
     }
   }
 
-  // Tekrarlama açıklaması oluştur
+  // Tekrarlama sayısını hesapla
+  int getOccurrenceCount(DateTime date) {
+    if (!isRecurring) return 1;
+
+    final difference = date.difference(startTime);
+    switch (recurrencePattern) {
+      case recurrenceDaily:
+        return (difference.inDays / (recurrenceInterval ?? 1)).ceil();
+      
+      case recurrenceWeekly:
+        if (recurrenceWeekDays == null || recurrenceWeekDays!.isEmpty) {
+          return (difference.inDays / ((recurrenceInterval ?? 1) * 7)).ceil();
+        }
+        
+        var count = 0;
+        var currentDate = startTime;
+        while (currentDate.isBefore(date)) {
+          if (recurrenceWeekDays!.contains(currentDate.weekday)) {
+            count++;
+          }
+          currentDate = currentDate.add(const Duration(days: 1));
+        }
+        return count;
+      
+      case recurrenceMonthly:
+        return (difference.inDays / (30 * (recurrenceInterval ?? 1))).ceil();
+      
+      default:
+        return 1;
+    }
+  }
+
+  // Tekrarlama açıklaması
   String getRecurrenceDescription() {
     if (!isRecurring) return 'Tekrarlanmıyor';
 
     final pattern = getRecurrenceTitle(recurrencePattern ?? '');
-    final interval = getIntervalTitle(
-      recurrencePattern ?? '',
-      recurrenceInterval ?? 1,
-    );
-
-    String weekDays = '';
-    if (recurrenceWeekDays != null && recurrenceWeekDays!.isNotEmpty) {
-      weekDays = recurrenceWeekDays!
-          .map((day) => MeetingModel.weekDays[day - 1])
-          .join(', ');
-    }
-
-    String endDescription = '';
-    if (recurrenceEndType != null) {
-      switch (recurrenceEndType) {
-        case endNever:
-          endDescription = 'süresiz';
-          break;
-        case endAfterOccurrences:
-          endDescription = '$recurrenceOccurrences kez';
-          break;
-        case endOnDate:
-          if (recurrenceEndDate != null) {
-            endDescription =
-                '${recurrenceEndDate!.day}/${recurrenceEndDate!.month}/${recurrenceEndDate!.year} tarihine kadar';
-          }
-          break;
-      }
-    }
-
-    if (recurrencePattern == recurrenceWeekly && weekDays.isNotEmpty) {
-      return '$interval, $weekDays günlerinde $endDescription';
-    }
-
-    return '$interval $endDescription';
-  }
-
-  // Sonraki tekrar tarihini hesapla
-  DateTime? getNextOccurrence(DateTime after) {
-    if (!isRecurring) return null;
-
     final interval = recurrenceInterval ?? 1;
-    DateTime nextDate;
 
+    String description = '';
     switch (recurrencePattern) {
       case recurrenceDaily:
-        nextDate = after.add(Duration(days: interval));
+        description = interval == 1 ? 'Her gün' : 'Her $interval günde bir';
         break;
+      
       case recurrenceWeekly:
         if (recurrenceWeekDays == null || recurrenceWeekDays!.isEmpty) {
-          nextDate = after.add(Duration(days: 7 * interval));
+          description = interval == 1 ? 'Her hafta' : 'Her $interval haftada bir';
         } else {
-          // Sonraki uygun günü bul
-          final currentWeekDay = after.weekday;
-          final nextWeekDay = recurrenceWeekDays!
-              .firstWhere((day) => day > currentWeekDay,
-                  orElse: () => recurrenceWeekDays!.first);
-
-          if (nextWeekDay > currentWeekDay) {
-            nextDate = after.add(Duration(days: nextWeekDay - currentWeekDay));
-          } else {
-            nextDate = after.add(Duration(
-                days: 7 - currentWeekDay + nextWeekDay + (7 * (interval - 1))));
-          }
+          final days = recurrenceWeekDays!
+              .map((day) => weekDays[day - 1])
+              .join(', ');
+          description = interval == 1
+              ? 'Her hafta: $days'
+              : 'Her $interval haftada bir: $days';
         }
         break;
+      
       case recurrenceMonthly:
-        final nextMonth = after.month + interval;
-        final year = after.year + (nextMonth > 12 ? 1 : 0);
-        final month = nextMonth > 12 ? nextMonth - 12 : nextMonth;
-        nextDate = DateTime(year, month, after.day);
+        description = interval == 1 ? 'Her ay' : 'Her $interval ayda bir';
         break;
+      
       default:
-        return null;
+        description = pattern;
     }
 
-    // Bitiş kontrolü
-    if (recurrenceEndType == endOnDate &&
-        recurrenceEndDate != null &&
-        nextDate.isAfter(recurrenceEndDate!)) {
-      return null;
+    switch (recurrenceEndType) {
+      case endAfterOccurrences:
+        description += ' (${recurrenceOccurrences ?? 0} kez)';
+        break;
+      
+      case endOnDate:
+        if (recurrenceEndDate != null) {
+          description += ' (${recurrenceEndDate!.day}/${recurrenceEndDate!.month}/${recurrenceEndDate!.year} tarihine kadar)';
+        }
+        break;
     }
 
-    return nextDate;
+    return description;
   }
 
   // Hatırlatma süreleri (dakika)

@@ -32,7 +32,12 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
   List<String> _selectedDepartments = [];
   List<String> _selectedParticipants = [];
   bool _isRecurring = false;
-  String? _recurrenceType;
+  String _recurrencePattern = MeetingModel.recurrenceDaily;
+  int _recurrenceInterval = 1;
+  List<int> _recurrenceWeekDays = [];
+  String _recurrenceEndType = MeetingModel.endNever;
+  int? _recurrenceOccurrences;
+  DateTime? _recurrenceEndDate;
 
   @override
   void dispose() {
@@ -91,97 +96,252 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
   }
 
   Future<void> _createMeeting() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    if (_selectedDepartments.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lütfen en az bir departman seçin'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (_selectedParticipants.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lütfen en az bir katılımcı seçin'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final meetingService = Provider.of<MeetingService>(context, listen: false);
-      final currentUser = authService.currentUser;
-
-      if (currentUser == null) throw 'Kullanıcı bulunamadı';
-
-      final startDateTime = DateTime(
-        _startDate.year,
-        _startDate.month,
-        _startDate.day,
-        _startTime.hour,
-        _startTime.minute,
-      );
-
-      final endDateTime = DateTime(
-        _endDate.year,
-        _endDate.month,
-        _endDate.day,
-        _endTime.hour,
-        _endTime.minute,
-      );
-
-      final meeting = MeetingModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        title: _titleController.text.trim(),
-        description: _descriptionController.text.trim(),
-        startTime: startDateTime,
-        endTime: endDateTime,
-        location: _isOnline ? _meetingLinkController.text.trim() : _locationController.text.trim(),
-        organizer: currentUser.uid,
-        participants: _selectedParticipants,
-        departments: _selectedDepartments,
-        status: MeetingModel.statusScheduled,
-        isOnline: _isOnline,
-        meetingLink: _isOnline ? _meetingLinkController.text.trim() : null,
-        meetingPlatform: _isOnline ? _selectedPlatform : null,
-        createdAt: DateTime.now(),
-        isRecurring: _isRecurring,
-        recurrenceType: _isRecurring ? _recurrenceType : null,
-      );
-
-      await meetingService.createMeeting(meeting);
-
-      if (mounted) {
+    if (_formKey.currentState!.validate()) {
+      if (_isRecurring &&
+          _recurrencePattern == MeetingModel.recurrenceWeekly &&
+          _recurrenceWeekDays.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Toplantı başarıyla oluşturuldu'),
-            backgroundColor: Colors.green,
+            content: Text('Lütfen en az bir gün seçin'),
           ),
         );
-        Navigator.pop(context);
+        return;
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: Colors.red,
-          ),
+
+      try {
+        setState(() {
+          _isLoading = true;
+        });
+
+        final meeting = MeetingModel(
+          id: const Uuid().v4(),
+          title: _titleController.text,
+          description: _descriptionController.text,
+          startTime: _startDate!,
+          endTime: _endDate!,
+          organizerId: _currentUser!.uid,
+          participants: _selectedParticipants,
+          departments: _selectedDepartments,
+          agenda: _agendaItems,
+          isOnline: _isOnlineMeeting,
+          meetingPlatform: _selectedPlatform,
+          meetingLink: _meetingLinkController.text,
+          location: _locationController.text,
+          status: MeetingModel.statusScheduled,
+          createdAt: DateTime.now(),
+          isRecurring: _isRecurring,
+          recurrencePattern: _recurrencePattern,
+          recurrenceInterval: _recurrenceInterval,
+          recurrenceWeekDays: _recurrenceWeekDays,
+          recurrenceEndType: _recurrenceEndType,
+          recurrenceOccurrences: _recurrenceOccurrences,
+          recurrenceEndDate: _recurrenceEndDate,
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
+
+        if (_isRecurring) {
+          await _meetingService.createRecurringMeetings(meeting);
+        } else {
+          await _meetingService.createMeeting(meeting);
+        }
+
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Toplantı başarıyla oluşturuldu')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Hata: ${e.toString()}')),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     }
+  }
+
+  Widget _buildRecurrenceSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Checkbox(
+                  value: _isRecurring,
+                  onChanged: (value) {
+                    setState(() {
+                      _isRecurring = value ?? false;
+                    });
+                  },
+                ),
+                const Text('Toplantıyı Tekrarla'),
+              ],
+            ),
+            if (_isRecurring) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _recurrencePattern,
+                decoration: const InputDecoration(
+                  labelText: 'Tekrarlama Deseni',
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: MeetingModel.recurrenceDaily,
+                    child: Text(MeetingModel.getRecurrenceTitle(MeetingModel.recurrenceDaily)),
+                  ),
+                  DropdownMenuItem(
+                    value: MeetingModel.recurrenceWeekly,
+                    child: Text(MeetingModel.getRecurrenceTitle(MeetingModel.recurrenceWeekly)),
+                  ),
+                  DropdownMenuItem(
+                    value: MeetingModel.recurrenceMonthly,
+                    child: Text(MeetingModel.getRecurrenceTitle(MeetingModel.recurrenceMonthly)),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _recurrencePattern = value!;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                initialValue: _recurrenceInterval.toString(),
+                decoration: const InputDecoration(
+                  labelText: 'Tekrarlama Aralığı',
+                ),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Lütfen bir değer girin';
+                  }
+                  final interval = int.tryParse(value);
+                  if (interval == null || interval < 1) {
+                    return 'Geçerli bir sayı girin';
+                  }
+                  return null;
+                },
+                onChanged: (value) {
+                  final interval = int.tryParse(value);
+                  if (interval != null && interval > 0) {
+                    setState(() {
+                      _recurrenceInterval = interval;
+                    });
+                  }
+                },
+              ),
+              if (_recurrencePattern == MeetingModel.recurrenceWeekly) ...[
+                const SizedBox(height: 16),
+                const Text('Tekrarlama Günleri'),
+                Wrap(
+                  spacing: 8,
+                  children: List.generate(7, (index) {
+                    final weekDay = index + 1;
+                    return FilterChip(
+                      label: Text(weekDays[index]),
+                      selected: _recurrenceWeekDays.contains(weekDay),
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _recurrenceWeekDays.add(weekDay);
+                          } else {
+                            _recurrenceWeekDays.remove(weekDay);
+                          }
+                        });
+                      },
+                    );
+                  }),
+                ),
+              ],
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _recurrenceEndType,
+                decoration: const InputDecoration(
+                  labelText: 'Tekrarlama Sonu',
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: MeetingModel.endNever,
+                    child: const Text('Süresiz'),
+                  ),
+                  DropdownMenuItem(
+                    value: MeetingModel.endAfterOccurrences,
+                    child: const Text('Belirli sayıda tekrar sonra'),
+                  ),
+                  DropdownMenuItem(
+                    value: MeetingModel.endOnDate,
+                    child: const Text('Belirli bir tarihte'),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _recurrenceEndType = value!;
+                  });
+                },
+              ),
+              if (_recurrenceEndType == MeetingModel.endAfterOccurrences) ...[
+                const SizedBox(height: 16),
+                TextFormField(
+                  initialValue: _recurrenceOccurrences?.toString(),
+                  decoration: const InputDecoration(
+                    labelText: 'Tekrar Sayısı',
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Lütfen bir değer girin';
+                    }
+                    final occurrences = int.tryParse(value);
+                    if (occurrences == null || occurrences < 1) {
+                      return 'Geçerli bir sayı girin';
+                    }
+                    return null;
+                  },
+                  onChanged: (value) {
+                    final occurrences = int.tryParse(value);
+                    if (occurrences != null && occurrences > 0) {
+                      setState(() {
+                        _recurrenceOccurrences = occurrences;
+                      });
+                    }
+                  },
+                ),
+              ],
+              if (_recurrenceEndType == MeetingModel.endOnDate) ...[
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: _recurrenceEndDate ?? DateTime.now(),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+                    );
+                    if (date != null) {
+                      setState(() {
+                        _recurrenceEndDate = date;
+                      });
+                    }
+                  },
+                  child: Text(_recurrenceEndDate != null
+                      ? 'Bitiş Tarihi: ${DateFormat('dd/MM/yyyy').format(_recurrenceEndDate!)}'
+                      : 'Bitiş Tarihi Seç'),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -189,244 +349,40 @@ class _CreateMeetingScreenState extends State<CreateMeetingScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Yeni Toplantı Oluştur'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CustomTextField(
-                controller: _titleController,
-                labelText: 'Toplantı Başlığı',
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Lütfen bir başlık girin';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              CustomTextField(
-                controller: _descriptionController,
-                labelText: 'Toplantı Açıklaması',
-                maxLines: 3,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Lütfen bir açıklama girin';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              SwitchListTile(
-                title: const Text('Online Toplantı'),
-                value: _isOnline,
-                onChanged: (value) {
-                  setState(() {
-                    _isOnline = value;
-                    _locationController.clear();
-                    _meetingLinkController.clear();
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              if (_isOnline) ...[
-                DropdownButtonFormField<String>(
-                  value: _selectedPlatform,
-                  decoration: const InputDecoration(
-                    labelText: 'Platform',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    DropdownMenuItem(
-                      value: MeetingModel.platformZoom,
-                      child: Text(MeetingModel.getPlatformTitle(MeetingModel.platformZoom)),
-                    ),
-                    DropdownMenuItem(
-                      value: MeetingModel.platformTeams,
-                      child: Text(MeetingModel.getPlatformTitle(MeetingModel.platformTeams)),
-                    ),
-                    DropdownMenuItem(
-                      value: MeetingModel.platformMeet,
-                      child: Text(MeetingModel.getPlatformTitle(MeetingModel.platformMeet)),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildBasicInfoSection(),
+                    const SizedBox(height: 16),
+                    _buildDateTimeSection(),
+                    const SizedBox(height: 16),
+                    _buildParticipantsSection(),
+                    const SizedBox(height: 16),
+                    _buildDepartmentsSection(),
+                    const SizedBox(height: 16),
+                    _buildAgendaSection(),
+                    const SizedBox(height: 16),
+                    _buildLocationSection(),
+                    const SizedBox(height: 16),
+                    _buildRecurrenceSection(),
+                    const SizedBox(height: 32),
+                    Center(
+                      child: ElevatedButton(
+                        onPressed: _createMeeting,
+                        child: const Text('Toplantı Oluştur'),
+                      ),
                     ),
                   ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _selectedPlatform = value);
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-                CustomTextField(
-                  controller: _meetingLinkController,
-                  labelText: 'Toplantı Linki',
-                  validator: _isOnline
-                      ? (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Lütfen toplantı linkini girin';
-                          }
-                          if (!Uri.tryParse(value)!.isAbsolute) {
-                            return 'Lütfen geçerli bir link girin';
-                          }
-                          return null;
-                        }
-                      : null,
-                ),
-              ] else ...[
-                CustomTextField(
-                  controller: _locationController,
-                  labelText: 'Toplantı Lokasyonu',
-                  validator: !_isOnline
-                      ? (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Lütfen toplantı lokasyonunu girin';
-                          }
-                          return null;
-                        }
-                      : null,
-                ),
-              ],
-              const SizedBox(height: 24),
-              const Text(
-                'Toplantı Zamanı',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: ListTile(
-                      title: const Text('Başlangıç Tarihi'),
-                      subtitle: Text(
-                        '${_startDate.day}/${_startDate.month}/${_startDate.year}',
-                      ),
-                      trailing: const Icon(Icons.calendar_today),
-                      onTap: _selectStartDate,
-                    ),
-                  ),
-                  Expanded(
-                    child: ListTile(
-                      title: const Text('Başlangıç Saati'),
-                      subtitle: Text(
-                        '${_startTime.hour}:${_startTime.minute.toString().padLeft(2, '0')}',
-                      ),
-                      trailing: const Icon(Icons.access_time),
-                      onTap: _selectStartTime,
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: ListTile(
-                      title: const Text('Bitiş Tarihi'),
-                      subtitle: Text(
-                        '${_endDate.day}/${_endDate.month}/${_endDate.year}',
-                      ),
-                      trailing: const Icon(Icons.calendar_today),
-                      onTap: _selectEndDate,
-                    ),
-                  ),
-                  Expanded(
-                    child: ListTile(
-                      title: const Text('Bitiş Saati'),
-                      subtitle: Text(
-                        '${_endTime.hour}:${_endTime.minute.toString().padLeft(2, '0')}',
-                      ),
-                      trailing: const Icon(Icons.access_time),
-                      onTap: _selectEndTime,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Departmanlar',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: AppConstants.departments.map((department) {
-                  return FilterChip(
-                    label: Text(department),
-                    selected: _selectedDepartments.contains(department),
-                    onSelected: (selected) {
-                      setState(() {
-                        if (selected) {
-                          _selectedDepartments.add(department);
-                        } else {
-                          _selectedDepartments.remove(department);
-                        }
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 24),
-              SwitchListTile(
-                title: const Text('Tekrarlı Toplantı'),
-                value: _isRecurring,
-                onChanged: (bool value) {
-                  setState(() {
-                    _isRecurring = value;
-                    if (!value) {
-                      _recurrenceType = null;
-                    }
-                  });
-                },
-              ),
-              if (_isRecurring) ...[
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: _recurrenceType,
-                  decoration: const InputDecoration(
-                    labelText: 'Tekrar Sıklığı',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    DropdownMenuItem(
-                      value: MeetingModel.recurrenceDaily,
-                      child: Text(MeetingModel.getRecurrenceTitle(MeetingModel.recurrenceDaily)),
-                    ),
-                    DropdownMenuItem(
-                      value: MeetingModel.recurrenceWeekly,
-                      child: Text(MeetingModel.getRecurrenceTitle(MeetingModel.recurrenceWeekly)),
-                    ),
-                    DropdownMenuItem(
-                      value: MeetingModel.recurrenceMonthly,
-                      child: Text(MeetingModel.getRecurrenceTitle(MeetingModel.recurrenceMonthly)),
-                    ),
-                  ],
-                  onChanged: (String? newValue) {
-                    setState(() {
-                      _recurrenceType = newValue;
-                    });
-                  },
-                ),
-              ],
-              const SizedBox(height: 32),
-              CustomButton(
-                text: 'Toplantı Oluştur',
-                onPressed: _isLoading ? null : _createMeeting,
-                isLoading: _isLoading,
-              ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 } 

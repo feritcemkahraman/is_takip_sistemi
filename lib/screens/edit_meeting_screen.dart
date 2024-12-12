@@ -39,6 +39,7 @@ class _EditMeetingScreenState extends State<EditMeetingScreen> {
   late bool _reminderEnabled;
   late List<int> _reminderMinutes;
   late String _reminderType;
+  bool _updateAllOccurrences = true;
 
   @override
   void initState() {
@@ -195,6 +196,138 @@ class _EditMeetingScreenState extends State<EditMeetingScreen> {
     }
   }
 
+  Widget _buildRecurrenceUpdateSection() {
+    if (!widget.meeting.isRecurring) return const SizedBox.shrink();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Tekrarlayan Toplantı Güncelleme',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            RadioListTile<bool>(
+              title: const Text('Tüm tekrarları güncelle'),
+              value: true,
+              groupValue: _updateAllOccurrences,
+              onChanged: (value) {
+                setState(() {
+                  _updateAllOccurrences = value!;
+                });
+              },
+            ),
+            RadioListTile<bool>(
+              title: const Text('Sadece bu toplantıyı güncelle'),
+              value: false,
+              groupValue: _updateAllOccurrences,
+              onChanged: (value) {
+                setState(() {
+                  _updateAllOccurrences = value!;
+                });
+              },
+            ),
+            const Divider(),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton(
+                  onPressed: () => _showCancelConfirmationDialog(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Tüm Seriyi İptal Et'),
+                ),
+                ElevatedButton(
+                  onPressed: () => _showCancelConfirmationDialog(false),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Bu Toplantıyı İptal Et'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showCancelConfirmationDialog(bool cancelAll) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(cancelAll ? 'Tüm Seriyi İptal Et' : 'Toplantıyı İptal Et'),
+        content: Text(
+          cancelAll
+              ? 'Tüm toplantı serisi iptal edilecek. Onaylıyor musunuz?'
+              : 'Bu toplantı iptal edilecek. Onaylıyor musunuz?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Vazgeç'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('İptal Et'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        setState(() {
+          _isLoading = true;
+        });
+
+        if (cancelAll) {
+          await _meetingService.cancelRecurringMeetings(
+            widget.meeting.parentMeetingId ?? widget.meeting.id,
+          );
+        } else {
+          await _meetingService.cancelSingleOccurrence(widget.meeting.id);
+        }
+
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                cancelAll
+                    ? 'Toplantı serisi iptal edildi'
+                    : 'Toplantı iptal edildi',
+              ),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Hata: ${e.toString()}')),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -255,6 +388,15 @@ class _EditMeetingScreenState extends State<EditMeetingScreen> {
             _buildDepartmentsSection(),
             const SizedBox(height: 16),
             _buildAttachmentsSection(),
+            const SizedBox(height: 16),
+            _buildRecurrenceUpdateSection(),
+            const SizedBox(height: 32),
+            Center(
+              child: ElevatedButton(
+                onPressed: _updateMeeting,
+                child: const Text('Toplantıyı Güncelle'),
+              ),
+            ),
           ],
         ),
       ),
