@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
-import '../constants/app_constants.dart';
 import '../widgets/custom_text_field.dart';
-import '../widgets/custom_button.dart';
 import 'register_screen.dart';
 import 'home_screen.dart';
-import 'admin/admin_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -20,7 +17,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
-  bool _isPasswordVisible = false;
 
   @override
   void dispose() {
@@ -32,47 +28,40 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+    });
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      final user = await authService.signInWithUsername(
-        username: _usernameController.text.trim(),
-        password: _passwordController.text.trim(),
+      await authService.signInWithUsername(
+        _usernameController.text.trim(),
+        _passwordController.text,
       );
 
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Hoş geldiniz, ${user.name}!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      if (user.role == AppConstants.roleAdmin) {
-        Navigator.of(context).pushReplacement(
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
           MaterialPageRoute(
-            builder: (context) => const AdminDashboard(),
-          ),
-        );
-      } else {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => HomeScreen(userData: user),
+            builder: (context) => const HomeScreen(),
           ),
         );
       }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString()),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Giriş hatası: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -81,39 +70,35 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16.0),
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'HAN Holding',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
+                const Icon(
+                  Icons.business,
+                  size: 100,
+                  color: Colors.blue,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 32),
                 const Text(
-                  AppConstants.appName,
-                  textAlign: TextAlign.center,
+                  'İş Takip Sistemi',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
+                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
                 CustomTextField(
                   controller: _usernameController,
                   labelText: 'Kullanıcı Adı',
-                  keyboardType: TextInputType.text,
+                  prefixIcon: Icons.person,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return AppConstants.errorRequiredField;
+                      return 'Kullanıcı adı gerekli';
                     }
                     return null;
                   },
@@ -121,45 +106,46 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 16),
                 CustomTextField(
                   controller: _passwordController,
-                  labelText: AppConstants.labelPassword,
-                  obscureText: !_isPasswordVisible,
+                  labelText: 'Şifre',
+                  prefixIcon: Icons.lock,
+                  obscureText: true,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return AppConstants.errorRequiredField;
-                    }
-                    if (value.length < 6) {
-                      return AppConstants.errorPasswordTooShort;
+                      return 'Şifre gerekli';
                     }
                     return null;
                   },
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _isPasswordVisible
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _isPasswordVisible = !_isPasswordVisible;
-                      });
-                    },
-                  ),
                 ),
                 const SizedBox(height: 24),
-                CustomButton(
-                  text: AppConstants.buttonLogin,
+                ElevatedButton(
                   onPressed: _isLoading ? null : _login,
-                  isLoading: _isLoading,
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('Giriş Yap'),
                 ),
                 const SizedBox(height: 16),
                 TextButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const RegisterScreen(),
-                    ),
-                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RegisterScreen(),
+                      ),
+                    );
+                  },
                   child: const Text('Hesabınız yok mu? Kayıt olun'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    // TODO: Şifremi unuttum ekranına yönlendir
+                  },
+                  child: const Text('Şifremi Unuttum'),
                 ),
               ],
             ),

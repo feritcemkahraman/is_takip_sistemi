@@ -30,17 +30,17 @@ if (flutterVersionName == null) {
 }
 
 android {
-    namespace "com.hanholding.is_takip_sistemi"
+    namespace "com.example.is_takip_sistemi"
     compileSdkVersion 34
     ndkVersion flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_11
-        targetCompatibility JavaVersion.VERSION_11
+        sourceCompatibility rootProject.ext.java_version
+        targetCompatibility rootProject.ext.java_version
     }
 
     kotlinOptions {
-        jvmTarget = '11'
+        jvmTarget = rootProject.ext.java_version.toString()
     }
 
     sourceSets {
@@ -48,9 +48,9 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.hanholding.is_takip_sistemi"
+        applicationId "com.example.is_takip_sistemi"
         minSdkVersion 21
-        targetSdkVersion 33
+        targetSdkVersion 34
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true
@@ -77,8 +77,10 @@ flutter {
 }
 
 dependencies {
-    implementation platform('com.google.firebase:firebase-bom:32.7.0')
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-    implementation 'androidx.multidex:multidex:2.0.1'
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+    implementation platform('com.google.firebase:firebase-bom:32.7.2')
     implementation 'com.google.firebase:firebase-analytics'
+    implementation 'com.android.support:multidex:1.0.3'
+    implementation 'androidx.core:core:1.10.0'
+    implementation 'androidx.work:work-runtime:2.8.1'
 }

@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
-import '../models/user_model.dart';
+import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
+import '../models/user_model.dart';
 
 class UserSelectorWidget extends StatefulWidget {
-  final List<String> selectedUserIds;
-  final bool multiSelect;
-  final Function(List<String>) onUsersSelected;
+  final String? selectedUserId;
+  final Function(String) onUserSelected;
+  final String? excludeUserId;
+  final String? department;
 
   const UserSelectorWidget({
     super.key,
-    this.selectedUserIds = const [],
-    this.multiSelect = false,
-    required this.onUsersSelected,
+    this.selectedUserId,
+    required this.onUserSelected,
+    this.excludeUserId,
+    this.department,
   });
 
   @override
@@ -19,18 +22,8 @@ class UserSelectorWidget extends StatefulWidget {
 }
 
 class _UserSelectorWidgetState extends State<UserSelectorWidget> {
-  final _authService = AuthService();
-  final _searchController = TextEditingController();
-  List<UserModel> _users = [];
-  List<String> _selectedUserIds = [];
-  bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedUserIds = List.from(widget.selectedUserIds);
-    _loadUsers();
-  }
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void dispose() {
@@ -38,98 +31,82 @@ class _UserSelectorWidgetState extends State<UserSelectorWidget> {
     super.dispose();
   }
 
-  Future<void> _loadUsers() async {
-    setState(() => _isLoading = true);
-    try {
-      final users = await _authService.getAllUsers();
-      setState(() {
-        _users = users;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Kullanıcılar yüklenirken hata: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  void _toggleUser(String userId) {
-    setState(() {
-      if (widget.multiSelect) {
-        if (_selectedUserIds.contains(userId)) {
-          _selectedUserIds.remove(userId);
-        } else {
-          _selectedUserIds.add(userId);
-        }
-      } else {
-        _selectedUserIds = [userId];
-      }
-      widget.onUsersSelected(_selectedUserIds);
-    });
-  }
-
-  List<UserModel> _getFilteredUsers() {
-    final query = _searchController.text.toLowerCase();
-    return _users.where((user) {
-      return user.displayName.toLowerCase().contains(query) ||
-          user.email.toLowerCase().contains(query);
-    }).toList();
-  }
-
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
+
     return Column(
       children: [
-        TextField(
-          controller: _searchController,
-          decoration: InputDecoration(
-            labelText: 'Kullanıcı Ara',
-            prefixIcon: const Icon(Icons.search),
-            border: const OutlineInputBorder(),
-            suffixIcon: _searchController.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() {});
-                    },
-                  )
-                : null,
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: TextField(
+            controller: _searchController,
+            decoration: const InputDecoration(
+              labelText: 'Kullanıcı Ara',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              setState(() {
+                _searchQuery = value.toLowerCase();
+              });
+            },
           ),
-          onChanged: (_) => setState(() {}),
         ),
-        const SizedBox(height: 16),
-        if (_isLoading)
-          const Center(child: CircularProgressIndicator())
-        else if (_users.isEmpty)
-          const Center(child: Text('Kullanıcı bulunamadı'))
-        else
-          Expanded(
-            child: ListView.builder(
-              itemCount: _getFilteredUsers().length,
+        FutureBuilder<List<UserModel>>(
+          future: widget.department != null
+              ? authService.getUsersByDepartment(widget.department!)
+              : authService.getAllUsers(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return Center(child: Text('Hata: ${snapshot.error}'));
+            }
+
+            final users = snapshot.data ?? [];
+            final filteredUsers = users.where((user) {
+              if (widget.excludeUserId != null &&
+                  user.id == widget.excludeUserId) {
+                return false;
+              }
+              if (_searchQuery.isEmpty) return true;
+              return user.name.toLowerCase().contains(_searchQuery) ||
+                  user.username.toLowerCase().contains(_searchQuery) ||
+                  user.department.toLowerCase().contains(_searchQuery);
+            }).toList();
+
+            if (filteredUsers.isEmpty) {
+              return const Center(child: Text('Kullanıcı bulunamadı'));
+            }
+
+            return ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: filteredUsers.length,
               itemBuilder: (context, index) {
-                final user = _getFilteredUsers()[index];
-                final isSelected = _selectedUserIds.contains(user.id);
+                final user = filteredUsers[index];
+                final isSelected = user.id == widget.selectedUserId;
+
                 return ListTile(
                   leading: CircleAvatar(
-                    child: Text(user.displayName[0]),
+                    backgroundColor:
+                        isSelected ? Colors.blue : Colors.grey.shade200,
+                    child: Text(user.name[0].toUpperCase()),
                   ),
-                  title: Text(user.displayName),
-                  subtitle: Text(user.email),
+                  title: Text(user.name),
+                  subtitle: Text(user.department),
                   trailing: isSelected
-                      ? const Icon(Icons.check_circle, color: Colors.green)
-                      : const Icon(Icons.check_circle_outline),
-                  onTap: () => _toggleUser(user.id),
+                      ? const Icon(Icons.check_circle, color: Colors.blue)
+                      : null,
+                  onTap: () => widget.onUserSelected(user.id),
                 );
               },
-            ),
-          ),
+            );
+          },
+        ),
       ],
     );
   }

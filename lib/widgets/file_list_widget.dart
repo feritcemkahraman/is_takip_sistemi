@@ -1,161 +1,91 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../services/storage_service.dart';
 import '../services/auth_service.dart';
-import '../services/task_service.dart';
-import '../constants/app_theme.dart';
+import '../services/storage_service.dart';
 
-class FileListWidget extends StatefulWidget {
-  final String taskId;
+class FileListWidget extends StatelessWidget {
+  final List<String> files;
+  final String? uploaderId;
+  final Function(String)? onDelete;
 
   const FileListWidget({
     super.key,
-    required this.taskId,
+    required this.files,
+    this.uploaderId,
+    this.onDelete,
   });
 
-  @override
-  State<FileListWidget> createState() => _FileListWidgetState();
-}
-
-class _FileListWidgetState extends State<FileListWidget> {
-  bool _isLoading = false;
-
-  Future<void> _deleteFile(String fileUrl) async {
-    setState(() => _isLoading = true);
-
+  Future<void> _openFile(String url) async {
     try {
-      final storageService = Provider.of<StorageService>(context, listen: false);
-      final taskService = Provider.of<TaskService>(context, listen: false);
-
-      await storageService.deleteFile(fileUrl);
-      await taskService.removeAttachment(widget.taskId, fileUrl);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Dosya başarıyla silindi'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Dosya silinirken hata: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  Future<void> _openFile(String fileUrl) async {
-    try {
-      final uri = Uri.parse(fileUrl);
+      final uri = Uri.parse(url);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
       } else {
         throw 'Dosya açılamadı';
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Dosya açılırken hata: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      print('Dosya açma hatası: $e');
+    }
+  }
+
+  String _getFileName(String url) {
+    try {
+      final uri = Uri.parse(url);
+      final segments = uri.pathSegments;
+      if (segments.isNotEmpty) {
+        return segments.last;
       }
+      return url;
+    } catch (e) {
+      return url;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final storageService = Provider.of<StorageService>(context);
-    final authService = Provider.of<AuthService>(context);
-    final currentUser = authService.currentUser;
+    if (files.isEmpty) {
+      return const Center(
+        child: Text('Henüz dosya eklenmemiş'),
+      );
+    }
 
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: storageService.getTaskFiles(widget.taskId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    final currentUser = Provider.of<AuthService>(context).currentUser;
+    final canDelete = onDelete != null &&
+        (currentUser?.uid == uploaderId || currentUser?.role == 'admin');
 
-        if (snapshot.hasError) {
-          return Center(
-            child: Text('Hata: ${snapshot.error}'),
-          );
-        }
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: files.length,
+      itemBuilder: (context, index) {
+        final file = files[index];
+        final fileName = _getFileName(file);
 
-        final files = snapshot.data ?? [];
-
-        if (files.isEmpty) {
-          return const Center(
-            child: Text('Henüz dosya eklenmemiş'),
-          );
-        }
-
-        return ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: files.length,
-          itemBuilder: (context, index) {
-            final file = files[index];
-            final fileType = file['fileType'] as String;
-            final fileName = file['fileName'] as String;
-            final fileSize = file['size'] as int;
-            final uploadedAt = DateTime.parse(file['uploadedAt']);
-            final fileUrl = file['url'] as String;
-            final uploaderId = file['userId'] as String;
-
-            return Card(
-              child: ListTile(
-                leading: Icon(
-                  storageService.getFileIcon(fileType),
-                  color: AppTheme.primaryColor,
-                  size: 32,
+        return Card(
+          child: ListTile(
+            leading: const Icon(Icons.insert_drive_file),
+            title: Text(
+              fileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.open_in_new),
+                  onPressed: () => _openFile(file),
                 ),
-                title: Text(
-                  fileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(storageService.formatFileSize(fileSize)),
-                    Text(
-                      '${uploadedAt.day}/${uploadedAt.month}/${uploadedAt.year} ${uploadedAt.hour}:${uploadedAt.minute}',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.download),
-                      onPressed: () => _openFile(fileUrl),
-                      color: AppTheme.primaryColor,
-                    ),
-                    if (currentUser?.uid == uploaderId || currentUser?.role == 'admin')
-                      IconButton(
-                        icon: const Icon(Icons.delete),
-                        onPressed: _isLoading ? null : () => _deleteFile(fileUrl),
-                        color: Colors.red,
-                      ),
-                  ],
-                ),
-              ),
-            );
-          },
+                if (canDelete)
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    onPressed: () => onDelete!(file),
+                    color: Colors.red,
+                  ),
+              ],
+            ),
+          ),
         );
       },
     );

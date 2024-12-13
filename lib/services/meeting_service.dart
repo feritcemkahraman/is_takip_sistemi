@@ -1,36 +1,221 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/meeting_model.dart';
-import '../services/notification_service.dart';
+import '../models/notification_model.dart';
+import 'notification_service.dart';
 
 class MeetingService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final NotificationService _notificationService = NotificationService();
+  final NotificationService _notificationService;
 
+  MeetingService({
+    required NotificationService notificationService,
+  }) : _notificationService = notificationService;
+
+  // Toplantı oluşturma
   Future<void> createMeeting(MeetingModel meeting) async {
     try {
-      await _firestore.collection('meetings').doc(meeting.id).set(meeting.toMap());
+      await _firestore.collection('meetings').doc(meeting.id).set(
+            meeting.toMap(),
+          );
+
+      await _notificationService.sendMeetingInviteNotification(meeting);
     } catch (e) {
-      throw Exception('Toplantı oluşturulurken bir hata oluştu: $e');
+      print('Toplantı oluşturma hatası: $e');
+      rethrow;
     }
   }
 
-  Future<MeetingModel> getMeeting(String meetingId) async {
+  // Tekrarlı toplantılar oluşturma
+  Future<void> createRecurringMeetings(MeetingModel meeting) async {
+    try {
+      // Ana toplantıyı oluştur
+      await createMeeting(meeting);
+
+      // Tekrarlı toplantıları oluştur
+      if (meeting.isRecurring) {
+        DateTime nextDate = meeting.startTime;
+        int occurrenceCount = 0;
+
+        while (!meeting.isRecurrenceEnded(nextDate)) {
+          nextDate = meeting.getNextOccurrence(nextDate)!;
+          occurrenceCount++;
+
+          if (meeting.recurrenceEndType == MeetingModel.endAfterOccurrences &&
+              occurrenceCount >= meeting.recurrenceOccurrences!) {
+            break;
+          }
+
+          final recurringMeeting = MeetingModel(
+            id: '${meeting.id}_${occurrenceCount}',
+            title: meeting.title,
+            description: meeting.description,
+            startTime: nextDate,
+            endTime: nextDate.add(meeting.endTime.difference(meeting.startTime)),
+            organizerId: meeting.organizerId,
+            participants: meeting.participants,
+            status: meeting.status,
+            isOnline: meeting.isOnline,
+            meetingPlatform: meeting.meetingPlatform,
+            meetingLink: meeting.meetingLink,
+            location: meeting.location,
+            isRecurring: false,
+            parentMeetingId: meeting.id,
+            attachments: meeting.attachments,
+            departments: meeting.departments,
+            agenda: meeting.agenda,
+            reminderEnabled: meeting.reminderEnabled,
+            reminderMinutes: meeting.reminderMinutes,
+          );
+
+          await createMeeting(recurringMeeting);
+        }
+      }
+    } catch (e) {
+      print('Tekrarlı toplantı oluşturma hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Toplantı güncelleme
+  Future<void> updateMeeting(MeetingModel meeting) async {
+    try {
+      await _firestore.collection('meetings').doc(meeting.id).update(
+            meeting.toMap(),
+          );
+
+      await _notificationService.sendMeetingUpdateNotification(meeting);
+    } catch (e) {
+      print('Toplantı güncelleme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Tekrarlı toplantıları güncelleme
+  Future<void> updateRecurringMeetings(MeetingModel meeting) async {
+    try {
+      // Ana toplantıyı güncelle
+      await updateMeeting(meeting);
+
+      // Gelecek tekrarlı toplantıları güncelle
+      if (meeting.isRecurring && meeting.parentMeetingId == null) {
+        final recurringMeetings = await _firestore
+            .collection('meetings')
+            .where('parentMeetingId', isEqualTo: meeting.id)
+            .where('startTime', isGreaterThan: Timestamp.now())
+            .get();
+
+        for (final doc in recurringMeetings.docs) {
+          final recurringMeeting = MeetingModel.fromMap(doc.data());
+
+          final updatedMeeting = recurringMeeting.copyWith(
+            title: meeting.title,
+            description: meeting.description,
+            isOnline: meeting.isOnline,
+            meetingPlatform: meeting.meetingPlatform,
+            meetingLink: meeting.meetingLink,
+            location: meeting.location,
+            participants: meeting.participants,
+            departments: meeting.departments,
+            agenda: meeting.agenda,
+            reminderEnabled: meeting.reminderEnabled,
+            reminderMinutes: meeting.reminderMinutes,
+          );
+
+          await updateMeeting(updatedMeeting);
+        }
+      }
+    } catch (e) {
+      print('Tekrarlı toplantı güncelleme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Toplantı iptal etme
+  Future<void> cancelMeeting(String meetingId) async {
+    try {
+      final meeting = await getMeeting(meetingId);
+      if (meeting == null) return;
+
+      final cancelledMeeting = meeting.copyWith(
+        status: MeetingModel.statusCancelled,
+      );
+
+      await _firestore.collection('meetings').doc(meetingId).update(
+            cancelledMeeting.toMap(),
+          );
+
+      await _notificationService.sendMeetingCancelNotification(cancelledMeeting);
+    } catch (e) {
+      print('Toplantı iptal hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Tekrarlı toplantıları iptal etme
+  Future<void> cancelRecurringMeetings(String meetingId) async {
+    try {
+      final meeting = await getMeeting(meetingId);
+      if (meeting == null) return;
+
+      // Ana toplantıyı iptal et
+      await cancelMeeting(meetingId);
+
+      // Gelecek tekrarlı toplantıları iptal et
+      if (meeting.isRecurring && meeting.parentMeetingId == null) {
+        final recurringMeetings = await _firestore
+            .collection('meetings')
+            .where('parentMeetingId', isEqualTo: meetingId)
+            .where('startTime', isGreaterThan: Timestamp.now())
+            .get();
+
+        for (final doc in recurringMeetings.docs) {
+          await cancelMeeting(doc.id);
+        }
+      }
+    } catch (e) {
+      print('Tekrarlı toplantı iptal hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Tek seferlik toplantı iptal etme
+  Future<void> cancelSingleOccurrence(String meetingId) async {
+    try {
+      await cancelMeeting(meetingId);
+    } catch (e) {
+      print('Tek seferlik toplantı iptal hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Toplantı silme
+  Future<void> deleteMeeting(String meetingId) async {
+    try {
+      await _firestore.collection('meetings').doc(meetingId).delete();
+    } catch (e) {
+      print('Toplantı silme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Toplantı getirme
+  Future<MeetingModel?> getMeeting(String meetingId) async {
     try {
       final doc = await _firestore.collection('meetings').doc(meetingId).get();
-      if (!doc.exists) {
-        throw Exception('Toplantı bulunamadı');
-      }
+      if (!doc.exists) return null;
       return MeetingModel.fromMap(doc.data()!);
     } catch (e) {
-      throw Exception('Toplantı alınırken bir hata oluştu: $e');
+      print('Toplantı getirme hatası: $e');
+      rethrow;
     }
   }
 
+  // Kullanıcının toplantılarını getirme
   Future<List<MeetingModel>> getUserMeetings(String userId) async {
     try {
       final querySnapshot = await _firestore
           .collection('meetings')
-          .where('participants', arrayContains: {'userId': userId})
+          .where('participants', arrayContains: userId)
           .orderBy('startTime', descending: true)
           .get();
 
@@ -38,219 +223,238 @@ class MeetingService {
           .map((doc) => MeetingModel.fromMap(doc.data()))
           .toList();
     } catch (e) {
-      throw Exception('Kullanıcı toplantıları alınırken bir hata oluştu: $e');
+      print('Kullanıcı toplantıları getirme hatası: $e');
+      rethrow;
     }
   }
 
-  Future<void> updateMeeting(MeetingModel meeting) async {
-    try {
-      await _firestore.collection('meetings').doc(meeting.id).update(meeting.toMap());
-    } catch (e) {
-      throw Exception('Toplantı güncellenirken bir hata oluştu: $e');
-    }
-  }
-
-  Future<void> deleteMeeting(String meetingId) async {
-    try {
-      await _firestore.collection('meetings').doc(meetingId).delete();
-    } catch (e) {
-      throw Exception('Toplantı silinirken bir hata oluştu: $e');
-    }
-  }
-
-  Future<void> addMeetingMinutes(String meetingId, MeetingMinutes minutes) async {
-    try {
-      await _firestore.collection('meetings').doc(meetingId).update({
-        'minutes': minutes.toMap(),
-      });
-
-      final meeting = await getMeeting(meetingId);
-      await _notificationService.sendMeetingMinutesAddedNotification(meeting);
-    } catch (e) {
-      throw Exception('Toplantı tutanağı eklenirken bir hata oluştu: $e');
-    }
-  }
-
-  Future<void> approveMeetingMinutes(String meetingId, String approverUserId) async {
-    try {
-      await _firestore.collection('meetings').doc(meetingId).update({
-        'minutes.isApproved': true,
-        'minutes.approvedBy': approverUserId,
-        'minutes.approvedAt': FieldValue.serverTimestamp(),
-      });
-
-      final meeting = await getMeeting(meetingId);
-      await _notificationService.sendMeetingMinutesApprovedNotification(meeting);
-    } catch (e) {
-      throw Exception('Toplantı tutanağı onaylanırken bir hata oluştu: $e');
-    }
-  }
-
-  Future<void> addMeetingDecision(String meetingId, MeetingDecision decision) async {
-    try {
-      await _firestore.collection('meetings').doc(meetingId).update({
-        'decisions': FieldValue.arrayUnion([decision.toMap()]),
-      });
-
-      final meeting = await getMeeting(meetingId);
-      await _notificationService.sendMeetingDecisionAddedNotification(meeting, decision);
-    } catch (e) {
-      throw Exception('Toplantı kararı eklenirken bir hata oluştu: $e');
-    }
-  }
-
-  Future<void> updateMeetingDecision(String meetingId, MeetingDecision updatedDecision) async {
-    try {
-      final meeting = await getMeeting(meetingId);
-      final decisions = meeting.decisions.map((d) {
-        if (d.id == updatedDecision.id) {
-          return updatedDecision;
-        }
-        return d;
-      }).toList();
-
-      await _firestore.collection('meetings').doc(meetingId).update({
-        'decisions': decisions.map((d) => d.toMap()).toList(),
-      });
-
-      await _notificationService.sendMeetingDecisionUpdatedNotification(meeting, updatedDecision);
-    } catch (e) {
-      throw Exception('Toplantı kararı güncellenirken bir hata oluştu: $e');
-    }
-  }
-
-  Future<void> completeMeetingDecision(String meetingId, String decisionId) async {
-    try {
-      final meeting = await getMeeting(meetingId);
-      final decisions = meeting.decisions.map((d) {
-        if (d.id == decisionId) {
-          final completedDecision = MeetingDecision(
-            id: d.id,
-            content: d.content,
-            assignedTo: d.assignedTo,
-            dueDate: d.dueDate,
-            status: MeetingDecision.statusCompleted,
-            createdBy: d.createdBy,
-            createdAt: d.createdAt,
-            completedAt: DateTime.now(),
-            attachments: d.attachments,
-            notes: d.notes,
-          );
-
-          _notificationService.sendMeetingDecisionCompletedNotification(meeting, completedDecision);
-          return completedDecision;
-        }
-        return d;
-      }).toList();
-
-      await _firestore.collection('meetings').doc(meetingId).update({
-        'decisions': decisions.map((d) => d.toMap()).toList(),
-      });
-    } catch (e) {
-      throw Exception('Toplantı kararı tamamlanırken bir hata oluştu: $e');
-    }
-  }
-
-  Future<void> cancelMeetingDecision(String meetingId, String decisionId) async {
-    try {
-      final meeting = await getMeeting(meetingId);
-      final decisions = meeting.decisions.map((d) {
-        if (d.id == decisionId) {
-          final cancelledDecision = MeetingDecision(
-            id: d.id,
-            content: d.content,
-            assignedTo: d.assignedTo,
-            dueDate: d.dueDate,
-            status: MeetingDecision.statusCancelled,
-            createdBy: d.createdBy,
-            createdAt: d.createdAt,
-            completedAt: null,
-            attachments: d.attachments,
-            notes: d.notes,
-          );
-
-          _notificationService.sendMeetingDecisionCancelledNotification(meeting, cancelledDecision);
-          return cancelledDecision;
-        }
-        return d;
-      }).toList();
-
-      await _firestore.collection('meetings').doc(meetingId).update({
-        'decisions': decisions.map((d) => d.toMap()).toList(),
-      });
-    } catch (e) {
-      throw Exception('Toplantı kararı iptal edilirken bir hata oluştu: $e');
-    }
-  }
-
-  Future<List<MeetingDecision>> getPendingDecisions(String userId) async {
+  // Yaklaşan toplantıları getirme
+  Future<List<MeetingModel>> getUpcomingMeetings(String userId) async {
     try {
       final querySnapshot = await _firestore
           .collection('meetings')
-          .where('decisions', arrayContains: {'assignedTo': userId, 'status': MeetingDecision.statusPending})
+          .where('participants', arrayContains: userId)
+          .where('startTime', isGreaterThan: Timestamp.now())
+          .where('status', isEqualTo: MeetingModel.statusScheduled)
+          .orderBy('startTime')
           .get();
 
-      final List<MeetingDecision> pendingDecisions = [];
-      for (var doc in querySnapshot.docs) {
-        final meeting = MeetingModel.fromMap(doc.data());
-        pendingDecisions.addAll(
-          meeting.decisions.where((d) => 
-            d.assignedTo == userId && 
-            d.status == MeetingDecision.statusPending
-          ),
-        );
-      }
-
-      return pendingDecisions;
+      return querySnapshot.docs
+          .map((doc) => MeetingModel.fromMap(doc.data()))
+          .toList();
     } catch (e) {
-      throw Exception('Bekleyen kararlar alınırken bir hata oluştu: $e');
+      print('Yaklaşan toplantıları getirme hatası: $e');
+      rethrow;
     }
   }
 
-  Future<List<MeetingDecision>> getOverdueDecisions(String userId) async {
+  // Geçmiş toplantıları getirme
+  Future<List<MeetingModel>> getPastMeetings(String userId) async {
     try {
-      final now = DateTime.now();
       final querySnapshot = await _firestore
           .collection('meetings')
-          .where('decisions', arrayContains: {'assignedTo': userId, 'status': MeetingDecision.statusPending})
+          .where('participants', arrayContains: userId)
+          .where('startTime', isLessThan: Timestamp.now())
+          .orderBy('startTime', descending: true)
           .get();
 
-      final List<MeetingDecision> overdueDecisions = [];
-      for (var doc in querySnapshot.docs) {
-        final meeting = MeetingModel.fromMap(doc.data());
-        final decisions = meeting.decisions.where((d) => 
-          d.assignedTo == userId && 
-          d.status == MeetingDecision.statusPending &&
-          d.dueDate.isBefore(now)
-        );
-
-        for (final decision in decisions) {
-          overdueDecisions.add(decision);
-          await _notificationService.sendMeetingDecisionOverdueNotification(meeting, decision);
-        }
-      }
-
-      return overdueDecisions;
+      return querySnapshot.docs
+          .map((doc) => MeetingModel.fromMap(doc.data()))
+          .toList();
     } catch (e) {
-      throw Exception('Gecikmiş kararlar alınırken bir hata oluştu: $e');
+      print('Geçmiş toplantıları getirme hatası: $e');
+      rethrow;
     }
   }
 
-  // Gecikmiş kararları kontrol et
+  // Toplantı katılımcısı ekleme
+  Future<void> addParticipant(String meetingId, MeetingParticipant participant) async {
+    try {
+      final meeting = await getMeeting(meetingId);
+      if (meeting == null) return;
+
+      final updatedParticipants = List<MeetingParticipant>.from(meeting.participants)
+        ..add(participant);
+
+      final updatedMeeting = meeting.copyWith(
+        participants: updatedParticipants,
+      );
+
+      await updateMeeting(updatedMeeting);
+    } catch (e) {
+      print('Katılımcı ekleme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Toplantı katılımcısı çıkarma
+  Future<void> removeParticipant(String meetingId, String userId) async {
+    try {
+      final meeting = await getMeeting(meetingId);
+      if (meeting == null) return;
+
+      final updatedParticipants = List<MeetingParticipant>.from(meeting.participants)
+        ..removeWhere((p) => p.userId == userId);
+
+      final updatedMeeting = meeting.copyWith(
+        participants: updatedParticipants,
+      );
+
+      await updateMeeting(updatedMeeting);
+    } catch (e) {
+      print('Katılımcı çıkarma hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Toplantı katılım durumu güncelleme
+  Future<void> updateParticipantStatus(
+    String meetingId,
+    String userId,
+    String status,
+  ) async {
+    try {
+      final meeting = await getMeeting(meetingId);
+      if (meeting == null) return;
+
+      final updatedParticipants = List<MeetingParticipant>.from(meeting.participants);
+      final participantIndex =
+          updatedParticipants.indexWhere((p) => p.userId == userId);
+
+      if (participantIndex != -1) {
+        final participant = updatedParticipants[participantIndex];
+        updatedParticipants[participantIndex] = MeetingParticipant(
+          userId: participant.userId,
+          name: participant.name,
+          rsvpStatus: status,
+          rsvpTime: DateTime.now(),
+        );
+
+        final updatedMeeting = meeting.copyWith(
+          participants: updatedParticipants,
+        );
+
+        await updateMeeting(updatedMeeting);
+      }
+    } catch (e) {
+      print('Katılım durumu güncelleme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Toplantı tutanağı ekleme
+  Future<void> addMinutes(String meetingId, MeetingMinutes minutes) async {
+    try {
+      final meeting = await getMeeting(meetingId);
+      if (meeting == null) return;
+
+      final updatedMeeting = meeting.copyWith(
+        minutes: minutes,
+      );
+
+      await updateMeeting(updatedMeeting);
+
+      await _notificationService.sendMeetingMinutesNotification(updatedMeeting);
+    } catch (e) {
+      print('Tutanak ekleme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Toplantı kararı ekleme
+  Future<void> addDecision(String meetingId, MeetingDecision decision) async {
+    try {
+      final meeting = await getMeeting(meetingId);
+      if (meeting == null) return;
+
+      final updatedDecisions = List<MeetingDecision>.from(meeting.decisions ?? [])
+        ..add(decision);
+
+      final updatedMeeting = meeting.copyWith(
+        decisions: updatedDecisions,
+      );
+
+      await updateMeeting(updatedMeeting);
+
+      await _notificationService.sendMeetingDecisionNotification(
+        updatedMeeting,
+        decision,
+      );
+    } catch (e) {
+      print('Karar ekleme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Toplantı kararı güncelleme
+  Future<void> updateDecision(
+    String meetingId,
+    String decisionId,
+    MeetingDecision updatedDecision,
+  ) async {
+    try {
+      final meeting = await getMeeting(meetingId);
+      if (meeting == null) return;
+
+      final decisions = List<MeetingDecision>.from(meeting.decisions ?? []);
+      final index = decisions.indexWhere((d) => d.id == decisionId);
+
+      if (index != -1) {
+        decisions[index] = updatedDecision;
+
+        final updatedMeeting = meeting.copyWith(
+          decisions: decisions,
+        );
+
+        await updateMeeting(updatedMeeting);
+
+        await _notificationService.sendMeetingDecisionNotification(
+          updatedMeeting,
+          updatedDecision,
+        );
+      }
+    } catch (e) {
+      print('Karar güncelleme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Toplantı kararı silme
+  Future<void> deleteDecision(String meetingId, String decisionId) async {
+    try {
+      final meeting = await getMeeting(meetingId);
+      if (meeting == null) return;
+
+      final updatedDecisions = List<MeetingDecision>.from(meeting.decisions ?? [])
+        ..removeWhere((d) => d.id == decisionId);
+
+      final updatedMeeting = meeting.copyWith(
+        decisions: updatedDecisions,
+      );
+
+      await updateMeeting(updatedMeeting);
+    } catch (e) {
+      print('Karar silme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Gecikmiş kararları kontrol etme
   Future<void> checkOverdueDecisions() async {
     try {
       final now = DateTime.now();
-      final querySnapshot = await _firestore
+      final meetings = await _firestore
           .collection('meetings')
-          .where('decisions', arrayContains: {'status': MeetingDecision.statusPending})
+          .where('status', isEqualTo: MeetingModel.statusCompleted)
           .get();
 
-      for (var doc in querySnapshot.docs) {
+      for (final doc in meetings.docs) {
         final meeting = MeetingModel.fromMap(doc.data());
-        final overdueDecisions = meeting.decisions.where((d) => 
-          d.status == MeetingDecision.statusPending &&
-          d.dueDate.isBefore(now)
-        );
+        final overdueDecisions = meeting.decisions?.where((d) =>
+                d.status == MeetingDecision.statusPending &&
+                d.dueDate != null &&
+                d.dueDate!.isBefore(now)) ??
+            [];
 
         for (final decision in overdueDecisions) {
           await _notificationService.sendMeetingDecisionOverdueNotification(
@@ -260,199 +464,71 @@ class MeetingService {
         }
       }
     } catch (e) {
-      print('Gecikmiş kararlar kontrol edilirken hata: $e');
+      print('Gecikmiş kararları kontrol hatası: $e');
+      rethrow;
     }
   }
 
-  // Her gün gecikmiş kararları kontrol et
-  void startOverdueDecisionsCheck() {
-    const duration = Duration(days: 1);
-    Future.doWhile(() async {
-      await checkOverdueDecisions();
-      await Future.delayed(duration);
-      return true; // Sonsuz döngü
-    });
+  // Toplantı hatırlatıcılarını kontrol etme
+  Future<void> checkMeetingReminders() async {
+    try {
+      final now = DateTime.now();
+      final meetings = await _firestore
+          .collection('meetings')
+          .where('status', isEqualTo: MeetingModel.statusScheduled)
+          .where('startTime', isGreaterThan: Timestamp.now())
+          .get();
+
+      for (final doc in meetings.docs) {
+        final meeting = MeetingModel.fromMap(doc.data());
+        if (!meeting.reminderEnabled) continue;
+
+        for (final minutes in meeting.reminderMinutes) {
+          final reminderTime =
+              meeting.startTime.subtract(Duration(minutes: minutes));
+          if (now.isAfter(reminderTime) &&
+              now.isBefore(reminderTime.add(const Duration(minutes: 1)))) {
+            await _notificationService.sendMeetingReminderNotification(meeting);
+          }
+        }
+      }
+    } catch (e) {
+      print('Toplantı hatırlatıcıları kontrol hatası: $e');
+      rethrow;
+    }
   }
 
-  // Tekrarlayan toplantı serisi oluştur
-  Future<List<String>> createRecurringMeetings(MeetingModel meeting) async {
-    if (!meeting.isRecurring) {
-      throw Exception('Toplantı tekrarlayan olarak işaretlenmemiş');
-    }
+  // Toplantı istatistiklerini getirme
+  Future<Map<String, dynamic>> getMeetingStats(String userId) async {
+    try {
+      final meetings = await getUserMeetings(userId);
+      final now = DateTime.now();
 
-    final createdMeetingIds = <String>[];
-    DateTime currentDate = meeting.startTime;
-    int occurrenceCount = 0;
-
-    while (true) {
-      // Tekrarlama sonu kontrolü
-      if (meeting.isRecurrenceEnded(currentDate)) {
-        break;
-      }
-
-      // Tekrarlama sayısı kontrolü
-      if (meeting.recurrenceEndType == MeetingModel.endAfterOccurrences &&
-          meeting.recurrenceOccurrences != null &&
-          occurrenceCount >= meeting.recurrenceOccurrences!) {
-        break;
-      }
-
-      // Yeni toplantı ID'si oluştur
-      final meetingId = _firestore.collection('meetings').doc().id;
-      createdMeetingIds.add(meetingId);
-
-      // Toplantı süresini hesapla
-      final duration = meeting.endTime.difference(meeting.startTime);
-      final endDate = currentDate.add(duration);
-
-      // Yeni toplantı oluştur
-      final newMeeting = meeting.copyWith(
-        id: meetingId,
-        startTime: currentDate,
-        endTime: endDate,
-        parentMeetingId: meeting.id,
-        createdAt: DateTime.now(),
-      );
-
-      // Toplantıyı kaydet
-      await _firestore.collection('meetings').doc(meetingId).set(newMeeting.toMap());
-
-      // Katılımcılara bildirim gönder
-      for (final participant in meeting.participants) {
-        await _notificationService.createNotification(
-          title: NotificationModel.getTitle(NotificationModel.typeMeetingInvite),
-          message: '${meeting.title} toplantı serisine davet edildiniz.',
-          type: NotificationModel.typeMeetingInvite,
-          userId: participant.userId,
-          taskId: meetingId,
-          senderId: meeting.organizerId,
-        );
-      }
-
-      // Sonraki tarihi hesapla
-      final nextDate = meeting.getNextOccurrence(currentDate);
-      if (nextDate == null) break;
-
-      currentDate = nextDate;
-      occurrenceCount++;
-    }
-
-    return createdMeetingIds;
-  }
-
-  // Tekrarlayan toplantı serisini güncelle
-  Future<void> updateRecurringMeetings(
-    String parentMeetingId,
-    MeetingModel updatedMeeting,
-  ) async {
-    // Seri ID'sine sahip tüm toplantıları bul
-    final meetings = await _firestore
-        .collection('meetings')
-        .where('parentMeetingId', isEqualTo: parentMeetingId)
-        .where('startTime', isGreaterThanOrEqualTo: Timestamp.now())
-        .get();
-
-    // Gelecek toplantıları güncelle
-    for (final doc in meetings.docs) {
-      final meeting = MeetingModel.fromMap(doc.data());
-      final duration = updatedMeeting.endTime.difference(updatedMeeting.startTime);
-
-      final updatedFields = {
-        'title': updatedMeeting.title,
-        'description': updatedMeeting.description,
-        'participants': updatedMeeting.participants.map((p) => p.toMap()).toList(),
-        'departments': updatedMeeting.departments,
-        'agenda': updatedMeeting.agenda,
-        'isOnline': updatedMeeting.isOnline,
-        'meetingPlatform': updatedMeeting.meetingPlatform,
-        'meetingLink': updatedMeeting.meetingLink,
-        'location': updatedMeeting.location,
-        'endTime': Timestamp.fromDate(
-          meeting.startTime.add(duration),
-        ),
-        'lastUpdatedAt': FieldValue.serverTimestamp(),
+      final stats = {
+        'total': meetings.length,
+        'upcoming': meetings
+            .where((m) =>
+                m.startTime.isAfter(now) &&
+                m.status == MeetingModel.statusScheduled)
+            .length,
+        'completed': meetings
+            .where((m) => m.status == MeetingModel.statusCompleted)
+            .length,
+        'cancelled': meetings
+            .where((m) => m.status == MeetingModel.statusCancelled)
+            .length,
+        'online': meetings.where((m) => m.isOnline).length,
+        'offline': meetings.where((m) => !m.isOnline).length,
+        'recurring': meetings.where((m) => m.isRecurring).length,
+        'withDecisions':
+            meetings.where((m) => (m.decisions?.isNotEmpty ?? false)).length,
+        'withMinutes': meetings.where((m) => m.minutes != null).length,
       };
 
-      await doc.reference.update(updatedFields);
-
-      // Katılımcılara bildirim gönder
-      for (final participant in updatedMeeting.participants) {
-        await _notificationService.createNotification(
-          title: NotificationModel.getTitle(NotificationModel.typeMeetingUpdate),
-          message: '${updatedMeeting.title} toplantı serisinde değişiklik yapıldı.',
-          type: NotificationModel.typeMeetingUpdate,
-          userId: participant.userId,
-          taskId: meeting.id,
-          senderId: updatedMeeting.organizerId,
-        );
-      }
+      return stats;
+    } catch (e) {
+      print('Toplantı istatistikleri getirme hatası: $e');
+      rethrow;
     }
-  }
-
-  // Tekrarlayan toplantı serisini iptal et
-  Future<void> cancelRecurringMeetings(String parentMeetingId) async {
-    final meetings = await _firestore
-        .collection('meetings')
-        .where('parentMeetingId', isEqualTo: parentMeetingId)
-        .where('startTime', isGreaterThanOrEqualTo: Timestamp.now())
-        .get();
-
-    for (final doc in meetings.docs) {
-      final meeting = MeetingModel.fromMap(doc.data());
-
-      await doc.reference.update({
-        'status': MeetingModel.statusCancelled,
-        'lastUpdatedAt': FieldValue.serverTimestamp(),
-      });
-
-      // Katılımcılara bildirim gönder
-      for (final participant in meeting.participants) {
-        await _notificationService.createNotification(
-          title: NotificationModel.getTitle(NotificationModel.typeMeetingCancelled),
-          message: '${meeting.title} toplantı serisi iptal edildi.',
-          type: NotificationModel.typeMeetingCancelled,
-          userId: participant.userId,
-          taskId: meeting.id,
-          senderId: meeting.organizerId,
-        );
-      }
-    }
-  }
-
-  // Tekrarlayan toplantı serisinden bir toplantıyı iptal et
-  Future<void> cancelSingleOccurrence(String meetingId) async {
-    final doc = await _firestore.collection('meetings').doc(meetingId).get();
-    if (!doc.exists) return;
-
-    final meeting = MeetingModel.fromMap(doc.data()!);
-
-    await doc.reference.update({
-      'status': MeetingModel.statusCancelled,
-      'lastUpdatedAt': FieldValue.serverTimestamp(),
-    });
-
-    // Katılımcılara bildirim gönder
-    for (final participant in meeting.participants) {
-      await _notificationService.createNotification(
-        title: NotificationModel.getTitle(NotificationModel.typeMeetingCancelled),
-        message: '${meeting.title} toplantısı iptal edildi.',
-        type: NotificationModel.typeMeetingCancelled,
-        userId: participant.userId,
-        taskId: meetingId,
-        senderId: meeting.organizerId,
-      );
-    }
-  }
-
-  // Tekrarlayan toplantı serisinin tüm toplantılarını getir
-  Stream<List<MeetingModel>> getRecurringMeetings(String parentMeetingId) {
-    return _firestore
-        .collection('meetings')
-        .where('parentMeetingId', isEqualTo: parentMeetingId)
-        .orderBy('startTime')
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => MeetingModel.fromMap(doc.data()))
-            .toList());
   }
 } 
