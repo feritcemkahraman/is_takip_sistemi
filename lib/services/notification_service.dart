@@ -179,6 +179,29 @@ class NotificationService {
     }
   }
 
+  // Bildirim izinlerini iste
+  Future<void> requestPermissions() async {
+    try {
+      // Platform'a göre bildirim izinlerini iste
+      // TODO: Platform spesifik izin istekleri eklenecek
+    } catch (e) {
+      print('Bildirim izni isteme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Bildirim servisini başlat
+  Future<void> initialize() async {
+    try {
+      // Bildirim servisini başlat
+      await requestPermissions();
+      // TODO: Platform spesifik başlatma işlemleri eklenecek
+    } catch (e) {
+      print('Bildirim servisi başlatma hatası: $e');
+      rethrow;
+    }
+  }
+
   // Görev bildirimi metni
   String _getTaskNotificationBody(TaskModel task, String action) {
     switch (action) {
@@ -226,4 +249,10 @@ class NotificationService {
         return 'İş akışı durumu değişti';
     }
   }
-} 
+
+  // Kaynakları temizleme
+  void dispose() {
+    // Firestore bağlantısını kapatma işlemleri burada yapılabilir
+    // Şu an için özel bir temizleme işlemi gerekmiyor
+  }
+}

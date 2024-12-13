@@ -1,13 +1,22 @@
 import 'package:flutter/material.dart';
 import '../models/calendar_event.dart';
+import '../models/user_model.dart';
+import '../services/user_service.dart';
 
-class EventDetailScreen extends StatelessWidget {
+class EventDetailScreen extends StatefulWidget {
   final CalendarEvent event;
 
   const EventDetailScreen({
     super.key,
     required this.event,
   });
+
+  @override
+  State<EventDetailScreen> createState() => _EventDetailScreenState();
+}
+
+class _EventDetailScreenState extends State<EventDetailScreen> {
+  final UserService _userService = UserService();
 
   @override
   Widget build(BuildContext context) {
@@ -29,18 +38,14 @@ class EventDetailScreen extends StatelessWidget {
                     Row(
                       children: [
                         Icon(
-                          event.type == 'task'
-                              ? Icons.task
-                              : event.type == 'meeting'
-                                  ? Icons.meeting_room
-                                  : Icons.event,
-                          color: event.color,
+                          Icons.event,
+                          color: widget.event.color,
                           size: 32,
                         ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: Text(
-                            event.title,
+                            widget.event.title,
                             style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
@@ -52,30 +57,26 @@ class EventDetailScreen extends StatelessWidget {
                     const Divider(height: 32),
                     _buildInfoRow(
                       'Başlangıç',
-                      '${event.startTime.day}/${event.startTime.month}/${event.startTime.year} ${event.startTime.hour}:${event.startTime.minute.toString().padLeft(2, '0')}',
+                      '${widget.event.startDate.day}/${widget.event.startDate.month}/${widget.event.startDate.year} ${widget.event.startDate.hour}:${widget.event.startDate.minute.toString().padLeft(2, '0')}',
                       Icons.access_time,
                     ),
                     const SizedBox(height: 16),
                     _buildInfoRow(
                       'Bitiş',
-                      '${event.endTime.day}/${event.endTime.month}/${event.endTime.year} ${event.endTime.hour}:${event.endTime.minute.toString().padLeft(2, '0')}',
+                      '${widget.event.endDate.day}/${widget.event.endDate.month}/${widget.event.endDate.year} ${widget.event.endDate.hour}:${widget.event.endDate.minute.toString().padLeft(2, '0')}',
                       Icons.access_time_filled,
                     ),
                     const SizedBox(height: 16),
                     _buildInfoRow(
                       'Tür',
-                      event.type == 'task'
-                          ? 'Görev'
-                          : event.type == 'meeting'
-                              ? 'Toplantı'
-                              : 'Etkinlik',
+                      'Etkinlik',
                       Icons.category,
                     ),
                   ],
                 ),
               ),
             ),
-            if (event.description.isNotEmpty) ...[
+            if (widget.event.description.isNotEmpty) ...[
               const SizedBox(height: 16),
               Card(
                 child: Padding(
@@ -91,13 +92,13 @@ class EventDetailScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(event.description),
+                      Text(widget.event.description),
                     ],
                   ),
                 ),
               ),
             ],
-            if (event.attendees.isNotEmpty) ...[
+            if (widget.event.attendees.isNotEmpty) ...[
               const SizedBox(height: 16),
               Card(
                 child: Padding(
@@ -113,21 +114,7 @@ class EventDetailScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: event.attendees.length,
-                        itemBuilder: (context, index) {
-                          final attendee = event.attendees[index];
-                          return ListTile(
-                            leading: CircleAvatar(
-                              child: Text(attendee.name[0].toUpperCase()),
-                            ),
-                            title: Text(attendee.name),
-                            subtitle: Text(attendee.email),
-                          );
-                        },
-                      ),
+                      _buildAttendeesList(),
                     ],
                   ),
                 ),
@@ -165,4 +152,36 @@ class EventDetailScreen extends StatelessWidget {
       ],
     );
   }
-} 
+
+  Widget _buildAttendeesList() {
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: widget.event.attendees.length,
+      itemBuilder: (context, index) {
+        final attendeeId = widget.event.attendees[index];
+        return FutureBuilder<UserModel?>(
+          future: _userService.getUser(attendeeId),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const ListTile(
+                leading: CircleAvatar(child: Icon(Icons.person)),
+                title: Text('Yükleniyor...'),
+              );
+            }
+
+            final attendee = snapshot.data!;
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Theme.of(context).primaryColor,
+                child: Text(attendee.name[0].toUpperCase()),
+              ),
+              title: Text(attendee.name),
+              subtitle: Text(attendee.email),
+            );
+          },
+        );
+      },
+    );
+  }
+}

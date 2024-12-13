@@ -17,7 +17,7 @@ class UserManagementScreen extends StatelessWidget {
         foregroundColor: Colors.white,
       ),
       body: StreamBuilder<List<UserModel>>(
-        stream: _authService.getAllUsers(),
+        stream: _authService.getAllUsersStream(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(child: Text('Bir hata oluştu: ${snapshot.error}'));

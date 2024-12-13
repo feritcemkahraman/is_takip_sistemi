@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/workflow_model.dart';
-import '../services/workflow_service.dart';
+import '../services/workflow/workflow_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/file_upload_widget.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 class WorkflowDetailScreen extends StatefulWidget {
   final WorkflowModel workflow;
@@ -287,7 +289,7 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
               final comment = widget.workflow.comments[index];
               return Card(
                 child: ListTile(
-                  title: Text(comment.text),
+                  title: Text(comment.comment),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -371,8 +373,9 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
         if (widget.workflow.canAddFile(_userId!))
           Padding(
             padding: const EdgeInsets.all(16),
-            child: FileUploadWidget(
-              onFileSelected: (path, name) => _addFile(path, name),
+            child: ElevatedButton(
+              onPressed: _handleFileUpload,
+              child: const Text('Dosya Yükle'),
             ),
           ),
       ],
@@ -502,31 +505,60 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
     }
   }
 
-  Future<void> _addFile(String path, String name) async {
-    setState(() => _isLoading = true);
-    try {
-      await _workflowService.addFile(
-        widget.workflow.id,
-        _userId!,
-        path,
-        name,
+  void _handleFileUpload() async {
+    if (!widget.workflow.canAddFile(_userId!)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bu iş akışına dosya ekleme yetkiniz yok.'),
+        ),
       );
-      if (mounted) {
+      return;
+    }
+
+    final result = await FilePicker.platform.pickFiles();
+    if (result != null) {
+      final file = result.files.first;
+      final fileName = file.name;
+      final fileBytes = file.bytes;
+
+      if (fileBytes == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Dosya eklendi')),
+          const SnackBar(
+            content: Text('Dosya okunamadı.'),
+          ),
         );
+        return;
       }
-    } catch (e) {
-      if (mounted) {
+
+      // Dosyayı Storage'a yükle
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('workflows/${widget.workflow.id}/$fileName');
+      
+      try {
+        await storageRef.putData(fileBytes);
+        final downloadUrl = await storageRef.getDownloadURL();
+
+        // Dosyayı iş akışına ekle
+        await _workflowService.addFile(
+          widget.workflow.id,
+          downloadUrl,
+          fileName,
+          _userId!,
+        );
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Dosya başarıyla yüklendi.'),
+          ),
+        );
+      } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Dosya yüklenirken hata oluştu: ${e.toString()}'),
           ),
         );
       }
-    } finally {
-      setState(() => _isLoading = false);
     }
   }
 
@@ -574,4 +606,4 @@ class _WorkflowDetailScreenState extends State<WorkflowDetailScreen> {
       }
     }
   }
-} 
+}

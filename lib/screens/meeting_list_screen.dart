@@ -19,11 +19,63 @@ class MeetingListScreen extends StatefulWidget {
 class _MeetingListScreenState extends State<MeetingListScreen> {
   String _selectedStatus = '';
   bool _showOnlyUpcoming = true;
+  late final MeetingService _meetingService;
+  final _exportService = ExportService();
+  List<MeetingModel> _meetings = [];
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _meetingService = Provider.of<MeetingService>(context, listen: false);
+    _loadMeetings();
+  }
+
+  Future<void> _loadMeetings() async {
+    setState(() => _isLoading = true);
+    try {
+      final meetings = await _meetingService.getMeetings();
+      setState(() {
+        _meetings = meetings;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Toplantılar yüklenirken hata: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportMeetings(String format) async {
+    try {
+      await ExportHelper.showLoadingDialog(context);
+      final result = await _exportService.exportMeetings(_meetings, format);
+      if (mounted) {
+        Navigator.pop(context); // Loading dialog'u kapat
+        await ExportHelper.showExportResultDialog(context, result);
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Loading dialog'u kapat
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Dışa aktarma hatası: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
-    final meetingService = Provider.of<MeetingService>(context);
     final currentUser = authService.currentUser;
 
     if (currentUser == null) {
@@ -54,8 +106,8 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
           Expanded(
             child: StreamBuilder<List<MeetingModel>>(
               stream: _showOnlyUpcoming
-                  ? meetingService.getUpcomingMeetings(currentUser.uid)
-                  : meetingService.getUserMeetings(currentUser.uid),
+                  ? _meetingService.getUpcomingMeetings(currentUser.uid)
+                  : _meetingService.getUserMeetings(currentUser.uid),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -270,70 +322,16 @@ class _MeetingListScreenState extends State<MeetingListScreen> {
             ListTile(
               leading: const Icon(Icons.picture_as_pdf),
               title: const Text('PDF olarak dışa aktar'),
-              onTap: () => _exportMeetings(context, 'pdf'),
+              onTap: () => _exportMeetings('pdf'),
             ),
             ListTile(
               leading: const Icon(Icons.table_chart),
               title: const Text('Excel olarak dışa aktar'),
-              onTap: () => _exportMeetings(context, 'excel'),
+              onTap: () => _exportMeetings('excel'),
             ),
           ],
         ),
       ),
     );
   }
-
-  Future<void> _exportMeetings(BuildContext context, String format) async {
-    try {
-      Navigator.pop(context); // Dialog'u kapat
-
-      // Yükleme göstergesi
-      await ExportHelper.showLoadingDialog(context);
-
-      final exportService = Provider.of<ExportService>(
-        context,
-        listen: false,
-      );
-
-      // Dışa aktar
-      final result = await exportService.exportMeetings(_meetings, format);
-
-      // Yükleme göstergesini kapat
-      if (mounted) Navigator.pop(context);
-
-      if (!mounted) return;
-
-      if (result.isSuccess && result.file != null) {
-        // Dosyayı paylaş
-        final shareResult = await ExportHelper.shareFile(
-          result.file!,
-          subject: 'Toplantı Listesi',
-        );
-
-        if (shareResult.isSuccess) {
-          ExportHelper.showSuccessSnackbar(context);
-        } else if (shareResult.isCancelled) {
-          ExportHelper.showCancelledSnackbar(context);
-        } else {
-          ExportHelper.showErrorDialog(
-            context,
-            shareResult.message ?? 'Bilinmeyen hata',
-          );
-        }
-      } else {
-        ExportHelper.showErrorDialog(
-          context,
-          result.message ?? 'Bilinmeyen hata',
-        );
-      }
-    } catch (e) {
-      // Yükleme göstergesini kapat
-      if (mounted) Navigator.pop(context);
-      
-      ExportHelper.showErrorDialog(
-        context,
-        e.toString(),
-      );
-    }
-  }
-} 
+}

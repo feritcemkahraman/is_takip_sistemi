@@ -11,7 +11,9 @@ class NotificationScreen extends StatefulWidget {
 }
 
 class _NotificationScreenState extends State<NotificationScreen> {
-  final NotificationService _notificationService = NotificationService();
+  final NotificationService _notificationService = NotificationService(
+    firestore: FirebaseFirestore.instance,
+  );
   final AuthService _authService = AuthService();
   String? _userId;
 
@@ -154,34 +156,44 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   void _handleNotificationTap(NotificationModel notification) {
     // Bildirim tipine göre yönlendirme
+    if (notification.data == null) return;
+    
     switch (notification.type) {
       case NotificationModel.typeTask:
-        Navigator.pushNamed(
-          context,
-          '/task_detail',
-          arguments: notification.data['taskId'],
-        );
+        if (notification.data!['taskId'] != null) {
+          Navigator.pushNamed(
+            context,
+            '/task_detail',
+            arguments: notification.data!['taskId'],
+          );
+        }
         break;
       case NotificationModel.typeMeeting:
-        Navigator.pushNamed(
-          context,
-          '/meeting_detail',
-          arguments: notification.data['meetingId'],
-        );
+        if (notification.data!['meetingId'] != null) {
+          Navigator.pushNamed(
+            context,
+            '/meeting_detail',
+            arguments: notification.data!['meetingId'],
+          );
+        }
         break;
       case NotificationModel.typeWorkflow:
-        Navigator.pushNamed(
-          context,
-          '/workflow_detail',
-          arguments: notification.data['workflowId'],
-        );
+        if (notification.data!['workflowId'] != null) {
+          Navigator.pushNamed(
+            context,
+            '/workflow_detail',
+            arguments: notification.data!['workflowId'],
+          );
+        }
         break;
       case NotificationModel.typeMessage:
-        Navigator.pushNamed(
-          context,
-          '/message_detail',
-          arguments: notification.data['messageId'],
-        );
+        if (notification.data!['messageId'] != null) {
+          Navigator.pushNamed(
+            context,
+            '/message_detail',
+            arguments: notification.data!['messageId'],
+          );
+        }
         break;
     }
   }

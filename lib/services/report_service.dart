@@ -513,4 +513,23 @@ class ReportService {
       rethrow;
     }
   }
-} 
+
+  // Kullanıcının raporlarını getir
+  Stream<List<Map<String, dynamic>>> getReports(String userId) {
+    try {
+      return _firestore
+          .collection('reports')
+          .where('userId', isEqualTo: userId)
+          .snapshots()
+          .map((snapshot) => snapshot.docs
+              .map((doc) => {
+                    'id': doc.id,
+                    ...doc.data(),
+                  })
+              .toList());
+    } catch (e) {
+      print('Rapor listeleme hatası: $e');
+      rethrow;
+    }
+  }
+}

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/workflow_model.dart';
-import '../services/workflow_service.dart';
+import '../services/workflow/workflow_service.dart';
 import '../services/auth_service.dart';
+import '../services/logging_service.dart';
 import '../widgets/file_upload_widget.dart';
 import '../widgets/user_selector_widget.dart';
 
@@ -21,7 +22,7 @@ class _CreateWorkflowScreenState extends State<CreateWorkflowScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _workflowService = WorkflowService();
+  late final WorkflowService _workflowService;
   final _authService = AuthService();
   
   String _type = WorkflowModel.typeTask;
@@ -34,6 +35,10 @@ class _CreateWorkflowScreenState extends State<CreateWorkflowScreen> {
   @override
   void initState() {
     super.initState();
+    _workflowService = WorkflowService(
+      firestore: FirebaseFirestore.instance,
+      loggingService: LoggingService(),
+    );
     if (widget.template != null) {
       _loadTemplate();
     }

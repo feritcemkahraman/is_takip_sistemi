@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/workflow_model.dart';
-import '../services/workflow_service.dart';
+import '../services/workflow/workflow_service.dart';
 import '../services/auth_service.dart';
 import 'workflow_detail_screen.dart';
 import 'create_workflow_screen.dart';

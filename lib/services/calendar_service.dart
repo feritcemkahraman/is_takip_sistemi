@@ -41,19 +41,25 @@ class CalendarService {
   }
 
   // Belirli bir tarih aralığındaki etkinlikleri getir
-  Stream<List<CalendarEvent>> getEvents(
+  Future<List<CalendarEvent>> getEvents(
     String userId,
-    DateTime start,
-    DateTime end,
-  ) {
-    return _events
-        .where('userId', isEqualTo: userId)
-        .where('startTime', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
-        .where('startTime', isLessThanOrEqualTo: Timestamp.fromDate(end))
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => CalendarEvent.fromMap(doc.data() as Map<String, dynamic>))
-            .toList());
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    try {
+      final querySnapshot = await _events
+          .where('userId', isEqualTo: userId)
+          .where('startTime', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+          .where('endTime', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => CalendarEvent.fromMap(doc.data() as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('Takvim olayları getirme hatası: $e');
+      rethrow;
+    }
   }
 
   // Toplantıyı takvime ekle
@@ -84,34 +90,25 @@ class CalendarService {
     }
   }
 
-  // Görevi takvime ekle
-  Future<void> addTaskToCalendar(TaskModel task) async {
+  // Görevden takvim etkinliği oluştur
+  Future<CalendarEvent> createEventFromTask(TaskModel task) async {
     final event = CalendarEvent(
       id: const Uuid().v4(),
       title: task.title,
       description: task.description,
       startTime: task.startDate,
       endTime: task.dueDate,
-      type: CalendarEvent.typeTask,
-      sourceId: task.id,
       userId: task.assignedTo,
-      color: task.priority == TaskModel.priorityHigh
-          ? CalendarEvent.colorDeadline
-          : CalendarEvent.colorTask,
+      type: 'task',
+      sourceId: task.id,
+      isAllDay: false,
+      color: '#${AppConstants.taskEventColor.value.toRadixString(16).padLeft(6, '0')}',
+      isSynced: false,
     );
 
     await _events.doc(event.id).set(event.toMap());
-
-    // Google Calendar senkronizasyonu
-    final settings = await _settings.doc(task.assignedTo).get();
-    if (settings.exists) {
-      final calendarSettings = CalendarSettings.fromMap(
-        settings.data() as Map<String, dynamic>,
-      );
-      if (calendarSettings.isGoogleCalendarEnabled) {
-        await _syncEventWithGoogleCalendar(event);
-      }
-    }
+    await _syncEventWithGoogleCalendar(event);
+    return event;
   }
 
   // Takvim etkinliğini güncelle
@@ -142,18 +139,21 @@ class CalendarService {
   // Google Calendar ile senkronizasyon
   Future<void> _syncEventWithGoogleCalendar(CalendarEvent event) async {
     try {
-      final client = await _getGoogleAuthClient();
+      final client = await _getGoogleClient();
       final calendar = google_calendar.CalendarApi(client);
 
-      final googleEvent = google_calendar.Event()
-        ..summary = event.title
-        ..description = event.description
-        ..start = google_calendar.EventDateTime()
-          ..dateTime = event.startTime.toUtc()
-          ..timeZone = 'UTC'
-        ..end = google_calendar.EventDateTime()
-          ..dateTime = event.endTime.toUtc()
-          ..timeZone = 'UTC';
+      final googleEvent = google_calendar.Event(
+        summary: event.title,
+        description: event.description,
+        start: google_calendar.EventDateTime(
+          dateTime: event.startTime.toUtc(),
+          timeZone: 'UTC',
+        ),
+        end: google_calendar.EventDateTime(
+          dateTime: event.endTime.toUtc(),
+          timeZone: 'UTC',
+        ),
+      );
 
       final createdEvent = await calendar.events.insert(
         googleEvent,
@@ -172,18 +172,21 @@ class CalendarService {
 
   Future<void> _updateGoogleCalendarEvent(CalendarEvent event) async {
     try {
-      final client = await _getGoogleAuthClient();
+      final client = await _getGoogleClient();
       final calendar = google_calendar.CalendarApi(client);
 
-      final googleEvent = google_calendar.Event()
-        ..summary = event.title
-        ..description = event.description
-        ..start = google_calendar.EventDateTime()
-          ..dateTime = event.startTime.toUtc()
-          ..timeZone = 'UTC'
-        ..end = google_calendar.EventDateTime()
-          ..dateTime = event.endTime.toUtc()
-          ..timeZone = 'UTC';
+      final googleEvent = google_calendar.Event(
+        summary: event.title,
+        description: event.description,
+        start: google_calendar.EventDateTime(
+          dateTime: event.startTime.toUtc(),
+          timeZone: 'UTC',
+        ),
+        end: google_calendar.EventDateTime(
+          dateTime: event.endTime.toUtc(),
+          timeZone: 'UTC',
+        ),
+      );
 
       await calendar.events.update(
         googleEvent,
@@ -197,7 +200,7 @@ class CalendarService {
 
   Future<void> _deleteGoogleCalendarEvent(CalendarEvent event) async {
     try {
-      final client = await _getGoogleAuthClient();
+      final client = await _getGoogleClient();
       final calendar = google_calendar.CalendarApi(client);
 
       await calendar.events.delete(
@@ -209,6 +212,54 @@ class CalendarService {
     }
   }
 
+  Future<void> addEventToGoogleCalendar(CalendarEvent event) async {
+    if (!isGoogleCalendarConfigured) return;
+
+    try {
+      final client = await _getGoogleClient();
+      final calendar = google_calendar.CalendarApi(client);
+
+      final googleEvent = google_calendar.Event(
+        summary: event.title,
+        description: event.description,
+        start: google_calendar.EventDateTime(
+          dateTime: event.startTime.toUtc(),
+          timeZone: 'UTC',
+        ),
+        end: google_calendar.EventDateTime(
+          dateTime: event.endTime.toUtc(),
+          timeZone: 'UTC',
+        ),
+      );
+
+      await calendar.events.insert(googleEvent, 'primary');
+    } catch (e) {
+      print('Google Calendar etkinlik ekleme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Google Calendar API için client oluştur
+  Future<AuthClient> _getGoogleClient() async {
+    if (!isGoogleCalendarConfigured) {
+      throw Exception('Google Calendar kimlik bilgileri eksik');
+    }
+
+    final credentials = ClientId(
+      _clientId,
+      _clientSecret,
+    );
+
+    return await clientViaUserConsent(
+      credentials,
+      _scopes,
+      (url) async {
+        await launchUrl(Uri.parse(url));
+      },
+    );
+  }
+
+  // Google Calendar API için client oluştur
   Future<AuthClient> _getGoogleAuthClient() async {
     final credentials = ClientId(
       _clientId,
@@ -250,4 +301,4 @@ class CalendarService {
       'lastSyncTime': FieldValue.serverTimestamp(),
     });
   }
-} 
+}

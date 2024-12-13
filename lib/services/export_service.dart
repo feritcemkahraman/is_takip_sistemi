@@ -5,6 +5,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:excel/excel.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:cross_file/cross_file.dart';
+import 'package:csv/csv.dart';
 import '../models/task_model.dart';
 import '../models/meeting_model.dart';
 import '../models/report_model.dart';
@@ -107,6 +108,113 @@ class ExportService {
     }
   }
 
+  // Görevleri dışa aktar
+  Future<ExportResult> exportTasks(List<TaskModel> tasks, String format) async {
+    try {
+      switch (format.toLowerCase()) {
+        case 'pdf':
+          return await exportToPdf(tasks, 'task');
+        case 'excel':
+          return await exportToExcel(tasks, 'task');
+        default:
+          throw Exception('Desteklenmeyen format: $format');
+      }
+    } catch (e) {
+      print('Görev dışa aktarma hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Toplantıları dışa aktar
+  Future<ExportResult> exportMeetings(
+    List<MeetingModel> meetings,
+    String format,
+  ) async {
+    try {
+      final now = DateTime.now();
+      final fileName = 'meetings_${now.millisecondsSinceEpoch}.$format';
+      final filePath = await getTemporaryDirectory().then((value) => '${value.path}/$fileName');
+
+      if (format == 'xlsx') {
+        final excel = Excel.createExcel();
+        final sheet = excel['Toplantılar'];
+
+        // Başlık satırı
+        sheet.appendRow([
+          'Başlık',
+          'Açıklama',
+          'Başlangıç',
+          'Bitiş',
+          'Platform',
+          'Toplantı URL',
+          'Organizatör',
+          'Katılımcılar',
+        ]);
+
+        // Toplantı verileri
+        for (final meeting in meetings) {
+          sheet.appendRow([
+            meeting.title,
+            meeting.description,
+            DateFormat('dd/MM/yyyy HH:mm').format(meeting.startTime),
+            DateFormat('dd/MM/yyyy HH:mm').format(meeting.endTime),
+            meeting.platform,
+            meeting.meetingUrl,
+            meeting.organizer,
+            meeting.participants.join(', '),
+          ]);
+        }
+
+        // Excel dosyasını kaydet
+        final excelBytes = excel.encode();
+        if (excelBytes == null) {
+          throw Exception('Excel dosyası oluşturulamadı');
+        }
+
+        await File(filePath).writeAsBytes(excelBytes);
+      } else if (format == 'csv') {
+        final csv = [
+          [
+            'Başlık',
+            'Açıklama',
+            'Başlangıç',
+            'Bitiş',
+            'Platform',
+            'Toplantı URL',
+            'Organizatör',
+            'Katılımcılar',
+          ],
+          ...meetings.map((meeting) => [
+                meeting.title,
+                meeting.description,
+                DateFormat('dd/MM/yyyy HH:mm').format(meeting.startTime),
+                DateFormat('dd/MM/yyyy HH:mm').format(meeting.endTime),
+                meeting.platform,
+                meeting.meetingUrl,
+                meeting.organizer,
+                meeting.participants.join(', '),
+              ]),
+        ];
+
+        final csvString = const ListToCsvConverter().convert(csv);
+        await File(filePath).writeAsString(csvString);
+      } else {
+        throw Exception('Desteklenmeyen dosya formatı: $format');
+      }
+
+      return ExportResult(
+        success: true,
+        filePath: filePath,
+        message: 'Toplantılar başarıyla dışa aktarıldı.',
+      );
+    } catch (e) {
+      return ExportResult(
+        success: false,
+        message: 'Toplantılar dışa aktarılırken hata oluştu: $e',
+      );
+    }
+  }
+
   // PDF içeriği oluşturma
   pw.Widget _buildPdfContent(List<dynamic> items, String type) {
     switch (type) {
@@ -196,7 +304,7 @@ class ExportService {
               _buildPdfCell(meeting.id),
               _buildPdfCell(meeting.title),
               _buildPdfCell(meeting.organizerId),
-              _buildPdfCell(meeting.status),
+              _buildPdfCell(meeting.meetingStatus),
               _buildPdfCell(
                 DateFormat('dd/MM/yyyy HH:mm').format(meeting.startTime),
               ),
@@ -241,7 +349,7 @@ class ExportService {
               _buildPdfCell(workflow.createdBy),
               _buildPdfCell(workflow.status),
               _buildPdfCell(
-                DateFormat('dd/MM/yyyy').format(workflow.dueDate),
+                DateFormat('dd/MM/yyyy').format(workflow.deadline),
               ),
             ],
           ),
@@ -278,33 +386,48 @@ class ExportService {
     }
   }
 
+  // Görevler için Excel verileri
+  List<List<String>> _getTaskExcelData(List<TaskModel> tasks) {
+    return tasks.map((task) => [
+      task.id,
+      task.title,
+      task.assignedTo,
+      task.status,
+      DateFormat('dd/MM/yyyy').format(task.dueDate),
+    ]).toList();
+  }
+
+  // Toplantılar için Excel verileri
+  List<List<String>> _getMeetingExcelData(List<MeetingModel> meetings) {
+    return meetings.map((meeting) => [
+      meeting.id,
+      meeting.title,
+      meeting.organizerId,
+      meeting.meetingStatus,
+      DateFormat('dd/MM/yyyy HH:mm').format(meeting.startTime),
+    ]).toList();
+  }
+
+  // İş akışları için Excel verileri
+  List<List<String>> _getWorkflowExcelData(List<WorkflowModel> workflows) {
+    return workflows.map((workflow) => [
+      workflow.id,
+      workflow.title,
+      workflow.createdBy,
+      workflow.status,
+      DateFormat('dd/MM/yyyy').format(workflow.deadline),
+    ]).toList();
+  }
+
   // Excel verileri
   List<List<String>> _getExcelData(List<dynamic> items, String type) {
     switch (type) {
       case 'task':
-        return items.cast<TaskModel>().map((task) => [
-              task.id,
-              task.title,
-              task.assignedTo,
-              task.status,
-              DateFormat('dd/MM/yyyy').format(task.dueDate),
-            ]).toList();
+        return _getTaskExcelData(items.cast<TaskModel>());
       case 'meeting':
-        return items.cast<MeetingModel>().map((meeting) => [
-              meeting.id,
-              meeting.title,
-              meeting.organizerId,
-              meeting.status,
-              DateFormat('dd/MM/yyyy HH:mm').format(meeting.startTime),
-            ]).toList();
+        return _getMeetingExcelData(items.cast<MeetingModel>());
       case 'workflow':
-        return items.cast<WorkflowModel>().map((workflow) => [
-              workflow.id,
-              workflow.title,
-              workflow.createdBy,
-              workflow.status,
-              DateFormat('dd/MM/yyyy').format(workflow.dueDate),
-            ]).toList();
+        return _getWorkflowExcelData(items.cast<WorkflowModel>());
       default:
         return [];
     }
@@ -334,4 +457,4 @@ class ExportResult {
     this.filePath,
     required this.message,
   });
-} 
+}

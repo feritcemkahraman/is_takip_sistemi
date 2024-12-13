@@ -1,39 +1,70 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CalendarEvent {
   final String id;
   final String title;
   final String description;
-  final String type;
   final DateTime startTime;
   final DateTime endTime;
-  final Color color;
-  final List<EventAttendee> attendees;
+  final String type;
+  final String createdBy;
+  final DateTime createdAt;
+  final String color;
+  final bool isAllDay;
+  final String? relatedId;
+  final String? meetingPlatform;
+  final String? location;
+  final bool isOnline;
+  final List<String> attendees;
+  final Map<String, dynamic>? metadata;
+
+  static const String typeMeeting = 'meeting';
+  static const String typeTask = 'task';
+  static const String typePersonal = 'personal';
+
+  static const String platformTeams = 'teams';
+  static const String platformZoom = 'zoom';
+  static const String platformSkype = 'skype';
+  static const String platformMeet = 'meet';
 
   CalendarEvent({
     required this.id,
     required this.title,
     required this.description,
-    required this.type,
     required this.startTime,
     required this.endTime,
+    required this.type,
+    required this.createdBy,
+    required this.createdAt,
     required this.color,
+    this.isAllDay = false,
+    this.relatedId,
+    this.meetingPlatform,
+    this.location,
+    this.isOnline = true,
     this.attendees = const [],
+    this.metadata,
   });
 
   factory CalendarEvent.fromMap(Map<String, dynamic> map) {
     return CalendarEvent(
       id: map['id'] as String,
       title: map['title'] as String,
-      description: map['description'] as String? ?? '',
+      description: map['description'] as String,
+      startTime: (map['startTime'] as Timestamp).toDate(),
+      endTime: (map['endTime'] as Timestamp).toDate(),
       type: map['type'] as String,
-      startTime: DateTime.parse(map['startTime'] as String),
-      endTime: DateTime.parse(map['endTime'] as String),
-      color: Color(int.parse(map['color'] as String)),
-      attendees: (map['attendees'] as List<dynamic>?)
-              ?.map((e) => EventAttendee.fromMap(e as Map<String, dynamic>))
-              .toList() ??
-          [],
+      createdBy: map['createdBy'] as String,
+      createdAt: (map['createdAt'] as Timestamp).toDate(),
+      color: map['color'] as String,
+      isAllDay: map['isAllDay'] as bool? ?? false,
+      relatedId: map['relatedId'] as String?,
+      meetingPlatform: map['meetingPlatform'] as String?,
+      location: map['location'] as String?,
+      isOnline: map['isOnline'] as bool? ?? true,
+      attendees: List<String>.from(map['attendees'] as List<dynamic>? ?? []),
+      metadata: map['metadata'] as Map<String, dynamic>?,
     );
   }
 
@@ -42,11 +73,19 @@ class CalendarEvent {
       'id': id,
       'title': title,
       'description': description,
+      'startTime': Timestamp.fromDate(startTime),
+      'endTime': Timestamp.fromDate(endTime),
       'type': type,
-      'startTime': startTime.toIso8601String(),
-      'endTime': endTime.toIso8601String(),
-      'color': color.value.toRadixString(16),
-      'attendees': attendees.map((e) => e.toMap()).toList(),
+      'createdBy': createdBy,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'color': color,
+      'isAllDay': isAllDay,
+      'relatedId': relatedId,
+      'meetingPlatform': meetingPlatform,
+      'location': location,
+      'isOnline': isOnline,
+      'attendees': attendees,
+      'metadata': metadata,
     };
   }
 
@@ -54,85 +93,107 @@ class CalendarEvent {
     String? id,
     String? title,
     String? description,
-    String? type,
     DateTime? startTime,
     DateTime? endTime,
-    Color? color,
-    List<EventAttendee>? attendees,
+    String? type,
+    String? createdBy,
+    DateTime? createdAt,
+    String? color,
+    bool? isAllDay,
+    String? relatedId,
+    String? meetingPlatform,
+    String? location,
+    bool? isOnline,
+    List<String>? attendees,
+    Map<String, dynamic>? metadata,
   }) {
     return CalendarEvent(
       id: id ?? this.id,
       title: title ?? this.title,
       description: description ?? this.description,
-      type: type ?? this.type,
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
+      type: type ?? this.type,
+      createdBy: createdBy ?? this.createdBy,
+      createdAt: createdAt ?? this.createdAt,
       color: color ?? this.color,
+      isAllDay: isAllDay ?? this.isAllDay,
+      relatedId: relatedId ?? this.relatedId,
+      meetingPlatform: meetingPlatform ?? this.meetingPlatform,
+      location: location ?? this.location,
+      isOnline: isOnline ?? this.isOnline,
       attendees: attendees ?? this.attendees,
+      metadata: metadata ?? this.metadata,
     );
   }
 }
 
-class EventAttendee {
-  final String id;
-  final String name;
-  final String email;
-  final String role;
-  final bool isOrganizer;
-  final bool hasResponded;
-  final String response;
+class CalendarSettings {
+  final String userId;
+  final bool isGoogleCalendarEnabled;
+  final String? googleCalendarId;
+  final bool showWeekends;
+  final bool showDeclinedEvents;
+  final String defaultView;
+  final String firstDayOfWeek;
+  final Map<String, dynamic>? preferences;
 
-  EventAttendee({
-    required this.id,
-    required this.name,
-    required this.email,
-    required this.role,
-    this.isOrganizer = false,
-    this.hasResponded = false,
-    this.response = 'pending',
+  CalendarSettings({
+    required this.userId,
+    this.isGoogleCalendarEnabled = false,
+    this.googleCalendarId,
+    this.showWeekends = true,
+    this.showDeclinedEvents = false,
+    this.defaultView = 'month',
+    this.firstDayOfWeek = 'monday',
+    this.preferences,
   });
 
-  factory EventAttendee.fromMap(Map<String, dynamic> map) {
-    return EventAttendee(
-      id: map['id'] as String,
-      name: map['name'] as String,
-      email: map['email'] as String,
-      role: map['role'] as String,
-      isOrganizer: map['isOrganizer'] as bool? ?? false,
-      hasResponded: map['hasResponded'] as bool? ?? false,
-      response: map['response'] as String? ?? 'pending',
+  factory CalendarSettings.fromMap(Map<String, dynamic> map) {
+    return CalendarSettings(
+      userId: map['userId'] as String,
+      isGoogleCalendarEnabled: map['isGoogleCalendarEnabled'] as bool? ?? false,
+      googleCalendarId: map['googleCalendarId'] as String?,
+      showWeekends: map['showWeekends'] as bool? ?? true,
+      showDeclinedEvents: map['showDeclinedEvents'] as bool? ?? false,
+      defaultView: map['defaultView'] as String? ?? 'month',
+      firstDayOfWeek: map['firstDayOfWeek'] as String? ?? 'monday',
+      preferences: map['preferences'] as Map<String, dynamic>?,
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'name': name,
-      'email': email,
-      'role': role,
-      'isOrganizer': isOrganizer,
-      'hasResponded': hasResponded,
-      'response': response,
+      'userId': userId,
+      'isGoogleCalendarEnabled': isGoogleCalendarEnabled,
+      'googleCalendarId': googleCalendarId,
+      'showWeekends': showWeekends,
+      'showDeclinedEvents': showDeclinedEvents,
+      'defaultView': defaultView,
+      'firstDayOfWeek': firstDayOfWeek,
+      'preferences': preferences,
     };
   }
 
-  EventAttendee copyWith({
-    String? id,
-    String? name,
-    String? email,
-    String? role,
-    bool? isOrganizer,
-    bool? hasResponded,
-    String? response,
+  CalendarSettings copyWith({
+    String? userId,
+    bool? isGoogleCalendarEnabled,
+    String? googleCalendarId,
+    bool? showWeekends,
+    bool? showDeclinedEvents,
+    String? defaultView,
+    String? firstDayOfWeek,
+    Map<String, dynamic>? preferences,
   }) {
-    return EventAttendee(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      email: email ?? this.email,
-      role: role ?? this.role,
-      isOrganizer: isOrganizer ?? this.isOrganizer,
-      hasResponded: hasResponded ?? this.hasResponded,
-      response: response ?? this.response,
+    return CalendarSettings(
+      userId: userId ?? this.userId,
+      isGoogleCalendarEnabled: isGoogleCalendarEnabled ?? this.isGoogleCalendarEnabled,
+      googleCalendarId: googleCalendarId ?? this.googleCalendarId,
+      showWeekends: showWeekends ?? this.showWeekends,
+      showDeclinedEvents: showDeclinedEvents ?? this.showDeclinedEvents,
+      defaultView: defaultView ?? this.defaultView,
+      firstDayOfWeek: firstDayOfWeek ?? this.firstDayOfWeek,
+      preferences: preferences ?? this.preferences,
     );
   }
-} 
+}

@@ -9,11 +9,18 @@ class NotificationModel {
   final Map<String, dynamic>? data;
   final bool isRead;
   final DateTime createdAt;
+  final int color;
 
   static const String typeTask = 'task';
   static const String typeMeeting = 'meeting';
   static const String typeWorkflow = 'workflow';
   static const String typeMessage = 'message';
+
+  static const int colorDefault = 0xFF2196F3; // Mavi
+  static const int colorTask = 0xFF4CAF50; // Yeşil
+  static const int colorMeeting = 0xFFF44336; // Kırmızı
+  static const int colorWorkflow = 0xFF9C27B0; // Mor
+  static const int colorMessage = 0xFF607D8B; // Gri
 
   NotificationModel({
     required this.id,
@@ -24,6 +31,7 @@ class NotificationModel {
     this.data,
     this.isRead = false,
     required this.createdAt,
+    this.color = colorDefault,
   });
 
   factory NotificationModel.fromFirestore(DocumentSnapshot doc) {
@@ -37,6 +45,7 @@ class NotificationModel {
       data: data['data'],
       isRead: data['isRead'] ?? false,
       createdAt: (data['createdAt'] as Timestamp).toDate(),
+      color: data['color'] ?? colorDefault,
     );
   }
 
@@ -49,6 +58,7 @@ class NotificationModel {
       'data': data,
       'isRead': isRead,
       'createdAt': Timestamp.fromDate(createdAt),
+      'color': color,
     };
   }
 
@@ -61,6 +71,7 @@ class NotificationModel {
     Map<String, dynamic>? data,
     bool? isRead,
     DateTime? createdAt,
+    int? color,
   }) {
     return NotificationModel(
       id: id ?? this.id,
@@ -71,6 +82,7 @@ class NotificationModel {
       data: data ?? this.data,
       isRead: isRead ?? this.isRead,
       createdAt: createdAt ?? this.createdAt,
+      color: color ?? this.color,
     );
   }
 } 

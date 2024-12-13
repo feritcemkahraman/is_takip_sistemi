@@ -2,37 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import 'file_helper.dart';
+import 'export_result.dart';
 
 class ExportHelper {
-  // Dışa aktarma durumu
-  static const int statusSuccess = 0;
-  static const int statusError = 1;
-  static const int statusCancelled = 2;
-  static const int statusRetry = 3;
-
-  // Maksimum yeniden deneme sayısı
-  static const int maxRetries = 3;
-
-  // Dışa aktarma sonucu
-  static class ExportResult {
-    final int status;
-    final String? message;
-    final File? file;
-    final int retryCount;
-
-    ExportResult({
-      required this.status,
-      this.message,
-      this.file,
-      this.retryCount = 0,
-    });
-
-    bool get isSuccess => status == statusSuccess;
-    bool get isError => status == statusError;
-    bool get isCancelled => status == statusCancelled;
-    bool get shouldRetry => status == statusRetry && retryCount < maxRetries;
-  }
-
   // Dosyayı paylaş
   static Future<ExportResult> shareFile(
     File file, {
@@ -48,25 +20,22 @@ class ExportHelper {
         // Dosya kontrolü
         if (!await FileHelper.checkFilePermissions(file)) {
           return ExportResult(
-            status: statusError,
+            isSuccess: false,
             message: 'Dosya erişim izni yok',
-            retryCount: retryCount,
           );
         }
 
         if (!await FileHelper.checkFileSize(file)) {
           return ExportResult(
-            status: statusError,
+            isSuccess: false,
             message: 'Dosya boyutu çok büyük',
-            retryCount: retryCount,
           );
         }
 
         if (!FileHelper.isValidMimeType(file.path)) {
           return ExportResult(
-            status: statusError,
+            isSuccess: false,
             message: 'Geçersiz dosya türü',
-            retryCount: retryCount,
           );
         }
 
@@ -90,29 +59,27 @@ class ExportHelper {
         );
 
         result = ExportResult(
-          status: statusSuccess,
-          file: tempFile,
-          retryCount: retryCount,
+          isSuccess: true,
+          filePath: tempFile.path,
+          message: 'Dosya başarıyla paylaşıldı',
         );
       } catch (e) {
         retryCount++;
-        if (retryCount < maxRetries) {
+        if (retryCount < 3) {
           result = ExportResult(
-            status: statusRetry,
-            message: 'Yeniden deneniyor (${retryCount}/${maxRetries})',
-            retryCount: retryCount,
+            isSuccess: false,
+            message: 'Yeniden deneniyor (${retryCount}/3)',
           );
           // Yeniden denemeden önce kısa bir bekleme
           await Future.delayed(Duration(seconds: retryCount));
         } else {
           result = ExportResult(
-            status: statusError,
-            message: e.toString(),
-            retryCount: retryCount,
+            isSuccess: false,
+            message: 'Dosya paylaşma hatası: $e',
           );
         }
       }
-    } while (result?.shouldRetry ?? false);
+    } while (result?.isSuccess == false && retryCount < 3);
 
     return result!;
   }
@@ -188,4 +155,51 @@ class ExportHelper {
       ),
     );
   }
-} 
+
+  // Yükleniyor dialog
+  static Future<void> showLoadingDialog(BuildContext context) async {
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return const AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Dışa aktarılıyor...'),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Yükleniyor dialogunu gizle
+  static void hideLoadingDialog(BuildContext context) {
+    Navigator.of(context).pop();
+  }
+
+  // Dışa aktarma sonucu dialog
+  static Future<void> showExportResultDialog(
+    BuildContext context,
+    ExportResult result,
+  ) async {
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(result.isSuccess ? 'Başarılı' : 'Hata'),
+          content: Text(result.message ?? 'İşlem tamamlandı.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Tamam'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}

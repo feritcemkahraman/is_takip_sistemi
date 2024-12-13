@@ -9,12 +9,12 @@ class LoggingService {
   final FirebaseFirestore _firestore;
 
   LoggingService({
-    required FirebaseCrashlytics crashlytics,
-    required FirebaseAnalytics analytics,
-    required FirebaseFirestore firestore,
-  })  : _crashlytics = crashlytics,
-        _analytics = analytics,
-        _firestore = firestore;
+    FirebaseCrashlytics? crashlytics,
+    FirebaseAnalytics? analytics,
+    FirebaseFirestore? firestore,
+  })  : _crashlytics = crashlytics ?? FirebaseCrashlytics.instance,
+        _analytics = analytics ?? FirebaseAnalytics.instance,
+        _firestore = firestore ?? FirebaseFirestore.instance;
 
   // Log seviyeleri
   static const String levelDebug = 'debug';
@@ -307,17 +307,21 @@ class LoggingService {
           ? Timestamp.fromDate(DateTime.now().subtract(period))
           : null;
 
-      var query = _firestore.collection('logs');
+      var query = _firestore.collection('logs').get();
 
       if (startDate != null) {
-        query = query.where('timestamp', isGreaterThan: startDate);
+        query = _firestore.collection('logs')
+            .where('timestamp', isGreaterThan: startDate)
+            .get();
       }
 
       if (module != null) {
-        query = query.where('module', isEqualTo: module);
+        query = _firestore.collection('logs')
+            .where('module', isEqualTo: module)
+            .get();
       }
 
-      final snapshot = await query.get();
+      final snapshot = await query;
 
       // Seviye bazında sayılar
       final levelCounts = <String, int>{};
@@ -374,4 +378,4 @@ class LoggingService {
       rethrow;
     }
   }
-} 
+}

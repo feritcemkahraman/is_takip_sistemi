@@ -343,20 +343,28 @@ class MeetingService {
   }
 
   // Toplantı tutanağı ekleme
-  Future<void> addMinutes(String meetingId, MeetingMinutes minutes) async {
+  Future<void> addMeetingMinutes(String meetingId, MeetingMinutes minutes) async {
     try {
-      final meeting = await getMeeting(meetingId);
-      if (meeting == null) return;
-
-      final updatedMeeting = meeting.copyWith(
-        minutes: minutes,
-      );
-
-      await updateMeeting(updatedMeeting);
-
-      await _notificationService.sendMeetingMinutesNotification(updatedMeeting);
+      await _firestore.collection('meetings').doc(meetingId).update({
+        'minutes': minutes.toMap(),
+        'lastUpdatedAt': FieldValue.serverTimestamp(),
+      });
     } catch (e) {
-      print('Tutanak ekleme hatası: $e');
+      print('Toplantı tutanağı ekleme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Toplantı tutanağı onaylama
+  Future<void> approveMeetingMinutes(String meetingId, String userId) async {
+    try {
+      await _firestore.collection('meetings').doc(meetingId).update({
+        'minutes.approvedBy': userId,
+        'minutes.approvedAt': FieldValue.serverTimestamp(),
+        'lastUpdatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('Toplantı tutanağı onaylama hatası: $e');
       rethrow;
     }
   }
@@ -531,4 +539,4 @@ class MeetingService {
       rethrow;
     }
   }
-} 
+}

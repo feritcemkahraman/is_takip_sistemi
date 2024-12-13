@@ -60,33 +60,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      await authService.updateUserProfile(
-        name: _nameController.text.trim(),
-        department: _selectedDepartment,
+      final user = authService.currentUser;
+
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Kullanıcı oturumu bulunamadı')),
+        );
+        return;
+      }
+
+      await authService.updateUser(
+        user.uid,
+        {
+          'displayName': _nameController.text,
+          'department': _selectedDepartment,
+        },
       );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profil başarıyla güncellendi'),
-            backgroundColor: Colors.green,
-          ),
+      if (_currentPasswordController.text.isNotEmpty &&
+          _newPasswordController.text.isNotEmpty) {
+        await authService.updateUserPassword(
+          _newPasswordController.text,
         );
-        setState(() => _isEditing = false);
       }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profil güncellendi')),
+      );
+
+      setState(() => _isEditing = false);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Hata: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Hata: $e')),
+      );
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      setState(() => _isLoading = false);
     }
   }
 
@@ -160,6 +168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   CustomTextField(
                     controller: _nameController,
                     labelText: 'Ad Soyad',
+                    prefixIcon: Icons.person,
                     enabled: _isEditing,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -172,6 +181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   CustomTextField(
                     controller: _emailController,
                     labelText: 'E-posta',
+                    prefixIcon: Icons.email,
                     enabled: false,
                   ),
                   const SizedBox(height: 16),
@@ -236,18 +246,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
             CustomTextField(
               controller: _currentPasswordController,
               labelText: 'Mevcut Şifre',
+              prefixIcon: Icons.lock,
               obscureText: true,
             ),
             const SizedBox(height: 16),
             CustomTextField(
               controller: _newPasswordController,
               labelText: 'Yeni Şifre',
+              prefixIcon: Icons.lock_outline,
               obscureText: true,
             ),
             const SizedBox(height: 16),
             CustomTextField(
               controller: _confirmPasswordController,
               labelText: 'Yeni Şifre (Tekrar)',
+              prefixIcon: Icons.lock_outline,
               obscureText: true,
             ),
             const SizedBox(height: 24),
@@ -261,4 +274,4 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-} 
+}

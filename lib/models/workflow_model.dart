@@ -4,138 +4,73 @@ class WorkflowModel {
   final String id;
   final String title;
   final String description;
-  final String status;
-  final String assignedTo;
   final String createdBy;
-  final DateTime dueDate;
   final DateTime createdAt;
-  final List<String> attachments;
-  final List<String> tags;
+  final DateTime deadline;
+  final String status;
+  final String priority;
+  final String type;
+  final List<String> assignedTo;
   final List<WorkflowStep> steps;
+  final List<WorkflowFile> files;
+  final List<WorkflowComment> comments;
+  final List<String> departments;
+  final List<String> tags;
+
+  static const String statusDraft = 'draft';
+  static const String statusPending = 'pending';
+  static const String statusInProgress = 'in_progress';
+  static const String statusCompleted = 'completed';
+  static const String statusRejected = 'rejected';
+  static const String statusActive = 'active';
+
+  static const String priorityLow = 'low';
+  static const String priorityNormal = 'normal';
+  static const String priorityHigh = 'high';
+  static const String priorityUrgent = 'urgent';
 
   WorkflowModel({
     required this.id,
     required this.title,
     required this.description,
-    required this.status,
-    required this.assignedTo,
     required this.createdBy,
-    required this.dueDate,
     required this.createdAt,
-    this.attachments = const [],
+    required this.deadline,
+    required this.status,
+    required this.priority,
+    required this.type,
+    required this.assignedTo,
+    required this.steps,
+    required this.files,
+    required this.comments,
+    this.departments = const [],
     this.tags = const [],
-    this.steps = const [],
   });
 
   factory WorkflowModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     return WorkflowModel(
       id: doc.id,
       title: data['title'] ?? '',
       description: data['description'] ?? '',
-      status: data['status'] ?? '',
-      assignedTo: data['assignedTo'] ?? '',
       createdBy: data['createdBy'] ?? '',
-      dueDate: (data['dueDate'] as Timestamp).toDate(),
       createdAt: (data['createdAt'] as Timestamp).toDate(),
-      attachments: List<String>.from(data['attachments'] ?? []),
+      deadline: (data['deadline'] as Timestamp).toDate(),
+      status: data['status'] ?? statusPending,
+      priority: data['priority'] ?? priorityNormal,
+      type: data['type'] ?? '',
+      assignedTo: List<String>.from(data['assignedTo'] ?? []),
+      steps: (data['steps'] as List<dynamic>? ?? [])
+          .map((step) => WorkflowStep.fromMap(step as Map<String, dynamic>))
+          .toList(),
+      files: (data['files'] as List<dynamic>? ?? [])
+          .map((file) => WorkflowFile.fromMap(file as Map<String, dynamic>))
+          .toList(),
+      comments: (data['comments'] as List<dynamic>? ?? [])
+          .map((comment) => WorkflowComment.fromMap(comment as Map<String, dynamic>))
+          .toList(),
+      departments: List<String>.from(data['departments'] ?? []),
       tags: List<String>.from(data['tags'] ?? []),
-      steps: (data['steps'] as List<dynamic>?)
-          ?.map((s) => WorkflowStep.fromMap(s as Map<String, dynamic>))
-          .toList() ?? [],
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'title': title,
-      'description': description,
-      'status': status,
-      'assignedTo': assignedTo,
-      'createdBy': createdBy,
-      'dueDate': Timestamp.fromDate(dueDate),
-      'createdAt': Timestamp.fromDate(createdAt),
-      'attachments': attachments,
-      'tags': tags,
-      'steps': steps.map((s) => s.toMap()).toList(),
-    };
-  }
-
-  bool isOverdue() {
-    return DateTime.now().isAfter(dueDate);
-  }
-
-  bool isActive() {
-    return status == 'active';
-  }
-
-  WorkflowModel copyWith({
-    String? id,
-    String? title,
-    String? description,
-    String? status,
-    String? assignedTo,
-    String? createdBy,
-    DateTime? dueDate,
-    DateTime? createdAt,
-    List<String>? attachments,
-    List<String>? tags,
-    List<WorkflowStep>? steps,
-  }) {
-    return WorkflowModel(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      description: description ?? this.description,
-      status: status ?? this.status,
-      assignedTo: assignedTo ?? this.assignedTo,
-      createdBy: createdBy ?? this.createdBy,
-      dueDate: dueDate ?? this.dueDate,
-      createdAt: createdAt ?? this.createdAt,
-      attachments: attachments ?? this.attachments,
-      tags: tags ?? this.tags,
-      steps: steps ?? this.steps,
-    );
-  }
-}
-
-class WorkflowStep {
-  final String id;
-  final String title;
-  final String description;
-  final String status;
-  final String assignedTo;
-  final DateTime? dueDate;
-  final DateTime? completedAt;
-  final List<String> attachments;
-  final List<String> approvers;
-
-  WorkflowStep({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.status,
-    required this.assignedTo,
-    this.dueDate,
-    this.completedAt,
-    this.attachments = const [],
-    this.approvers = const [],
-  });
-
-  factory WorkflowStep.fromMap(Map<String, dynamic> map) {
-    return WorkflowStep(
-      id: map['id'] ?? '',
-      title: map['title'] ?? '',
-      description: map['description'] ?? '',
-      status: map['status'] ?? '',
-      assignedTo: map['assignedTo'] ?? '',
-      dueDate: map['dueDate'] != null
-          ? (map['dueDate'] as Timestamp).toDate()
-          : null,
-      completedAt: map['completedAt'] != null
-          ? (map['completedAt'] as Timestamp).toDate()
-          : null,
-      attachments: List<String>.from(map['attachments'] ?? []),
-      approvers: List<String>.from(map['approvers'] ?? []),
     );
   }
 
@@ -144,37 +79,345 @@ class WorkflowStep {
       'id': id,
       'title': title,
       'description': description,
+      'createdBy': createdBy,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'deadline': Timestamp.fromDate(deadline),
       'status': status,
+      'priority': priority,
+      'type': type,
       'assignedTo': assignedTo,
-      'dueDate': dueDate != null ? Timestamp.fromDate(dueDate!) : null,
-      'completedAt':
-          completedAt != null ? Timestamp.fromDate(completedAt!) : null,
-      'attachments': attachments,
-      'approvers': approvers,
+      'steps': steps.map((step) => step.toMap()).toList(),
+      'files': files.map((file) => file.toMap()).toList(),
+      'comments': comments.map((comment) => comment.toMap()).toList(),
+      'departments': departments,
+      'tags': tags,
     };
   }
 
-  WorkflowStep copyWith({
+  Map<String, dynamic> toFirestore() {
+    final map = toMap();
+    map.remove('id');
+    return map;
+  }
+
+  WorkflowModel copyWith({
     String? id,
     String? title,
     String? description,
+    String? createdBy,
+    DateTime? createdAt,
+    DateTime? deadline,
     String? status,
-    String? assignedTo,
-    DateTime? dueDate,
-    DateTime? completedAt,
-    List<String>? attachments,
-    List<String>? approvers,
+    String? priority,
+    String? type,
+    List<String>? assignedTo,
+    List<WorkflowStep>? steps,
+    List<WorkflowFile>? files,
+    List<WorkflowComment>? comments,
+    List<String>? departments,
+    List<String>? tags,
   }) {
-    return WorkflowStep(
+    return WorkflowModel(
       id: id ?? this.id,
       title: title ?? this.title,
       description: description ?? this.description,
+      createdBy: createdBy ?? this.createdBy,
+      createdAt: createdAt ?? this.createdAt,
+      deadline: deadline ?? this.deadline,
       status: status ?? this.status,
+      priority: priority ?? this.priority,
+      type: type ?? this.type,
       assignedTo: assignedTo ?? this.assignedTo,
-      dueDate: dueDate ?? this.dueDate,
-      completedAt: completedAt ?? this.completedAt,
-      attachments: attachments ?? this.attachments,
-      approvers: approvers ?? this.approvers,
+      steps: steps ?? this.steps,
+      files: files ?? this.files,
+      comments: comments ?? this.comments,
+      departments: departments ?? this.departments,
+      tags: tags ?? this.tags,
     );
   }
-} 
+
+  // Status check methods
+  bool isActive() => status == statusActive;
+  bool isCompleted() => status == statusCompleted;
+  bool isCancelled() => status == statusRejected;
+  bool isOverdue() => DateTime.now().isAfter(deadline) && status != statusCompleted;
+
+  // Additional methods
+  WorkflowStep? get currentStep {
+    return steps.firstWhere(
+      (step) => step.status == WorkflowStep.statusActive,
+      orElse: () => steps.firstWhere(
+        (step) => step.status == WorkflowStep.statusPending,
+        orElse: () => steps.first,
+      ),
+    );
+  }
+
+  String get priorityText {
+    switch (priority) {
+      case priorityLow:
+        return 'Düşük';
+      case priorityNormal:
+        return 'Normal';
+      case priorityHigh:
+        return 'Yüksek';
+      case priorityUrgent:
+        return 'Acil';
+      default:
+        return 'Bilinmiyor';
+    }
+  }
+
+  String get remainingTimeText {
+    final remaining = deadline.difference(DateTime.now());
+    if (remaining.isNegative) {
+      return 'Gecikmiş';
+    }
+    if (remaining.inDays > 0) {
+      return '${remaining.inDays} gün';
+    }
+    if (remaining.inHours > 0) {
+      return '${remaining.inHours} saat';
+    }
+    return '${remaining.inMinutes} dakika';
+  }
+
+  bool canEdit(String userId) {
+    return createdBy == userId || assignedTo.contains(userId);
+  }
+
+  bool canDelete(String userId) {
+    return createdBy == userId;
+  }
+
+  bool canAddComment(String userId) {
+    return assignedTo.contains(userId) || createdBy == userId;
+  }
+
+  bool canAddFile(String userId) {
+    return assignedTo.contains(userId) || createdBy == userId;
+  }
+
+  bool hasAttachments() {
+    return files.isNotEmpty;
+  }
+
+  bool hasComments() {
+    return comments.isNotEmpty;
+  }
+}
+
+class WorkflowStep {
+  final String id;
+  final String title;
+  final String description;
+  final DateTime deadline;
+  final String assignedTo;
+  final String status;
+  final String type;
+  final DateTime? completedAt;
+  final int order;
+  final Map<String, dynamic>? conditions;
+  final List<String>? trueSteps;
+  final List<String>? falseSteps;
+  final List<WorkflowStep>? parallelSteps;
+  final Map<String, dynamic>? loopCondition;
+  final List<WorkflowStep>? loopSteps;
+
+  static const String statusPending = 'pending';
+  static const String statusInProgress = 'in_progress';
+  static const String statusCompleted = 'completed';
+  static const String statusRejected = 'rejected';
+  static const String statusActive = 'active';
+  static const String statusSkipped = 'skipped';
+
+  static const String typeTask = 'task';
+  static const String typeApproval = 'approval';
+  static const String typeCondition = 'condition';
+  static const String typeParallel = 'parallel';
+  static const String typeLoop = 'loop';
+
+  WorkflowStep({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.deadline,
+    required this.assignedTo,
+    required this.status,
+    required this.type,
+    this.completedAt,
+    required this.order,
+    this.conditions,
+    this.trueSteps,
+    this.falseSteps,
+    this.parallelSteps,
+    this.loopCondition,
+    this.loopSteps,
+  });
+
+  factory WorkflowStep.fromMap(Map<String, dynamic> map) {
+    return WorkflowStep(
+      id: map['id'] as String,
+      title: map['title'] as String,
+      description: map['description'] as String,
+      deadline: (map['deadline'] as Timestamp).toDate(),
+      assignedTo: map['assignedTo'] as String,
+      status: map['status'] as String,
+      type: map['type'] as String,
+      completedAt: map['completedAt'] != null ? (map['completedAt'] as Timestamp).toDate() : null,
+      order: map['order'] as int,
+      conditions: map['conditions'] as Map<String, dynamic>?,
+      trueSteps: map['trueSteps'] != null ? List<String>.from(map['trueSteps'] as List<dynamic>) : null,
+      falseSteps: map['falseSteps'] != null ? List<String>.from(map['falseSteps'] as List<dynamic>) : null,
+      parallelSteps: map['parallelSteps'] != null
+          ? (map['parallelSteps'] as List<dynamic>)
+              .map((step) => WorkflowStep.fromMap(step as Map<String, dynamic>))
+              .toList()
+          : null,
+      loopCondition: map['loopCondition'] as Map<String, dynamic>?,
+      loopSteps: map['loopSteps'] != null
+          ? (map['loopSteps'] as List<dynamic>)
+              .map((step) => WorkflowStep.fromMap(step as Map<String, dynamic>))
+              .toList()
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'deadline': Timestamp.fromDate(deadline),
+      'assignedTo': assignedTo,
+      'status': status,
+      'type': type,
+      'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
+      'order': order,
+      'conditions': conditions,
+      'trueSteps': trueSteps,
+      'falseSteps': falseSteps,
+      'parallelSteps': parallelSteps?.map((step) => step.toMap()).toList(),
+      'loopCondition': loopCondition,
+      'loopSteps': loopSteps?.map((step) => step.toMap()).toList(),
+    };
+  }
+
+  bool get isCompleted => status == statusCompleted;
+}
+
+class WorkflowFile {
+  final String id;
+  final String name;
+  final String url;
+  final String type;
+  final int size;
+  final String uploadedBy;
+  final DateTime uploadedAt;
+
+  WorkflowFile({
+    required this.id,
+    required this.name,
+    required this.url,
+    required this.type,
+    required this.size,
+    required this.uploadedBy,
+    required this.uploadedAt,
+  });
+
+  factory WorkflowFile.fromMap(Map<String, dynamic> map) {
+    return WorkflowFile(
+      id: map['id'] as String,
+      name: map['name'] as String,
+      url: map['url'] as String,
+      type: map['type'] as String,
+      size: map['size'] as int,
+      uploadedBy: map['uploadedBy'] as String,
+      uploadedAt: (map['uploadedAt'] as Timestamp).toDate(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'url': url,
+      'type': type,
+      'size': size,
+      'uploadedBy': uploadedBy,
+      'uploadedAt': Timestamp.fromDate(uploadedAt),
+    };
+  }
+}
+
+class WorkflowComment {
+  final String id;
+  final String comment;
+  final String userId;
+  final DateTime timestamp;
+  final List<String>? attachments;
+
+  WorkflowComment({
+    required this.id,
+    required this.comment,
+    required this.userId,
+    required this.timestamp,
+    this.attachments,
+  });
+
+  factory WorkflowComment.fromMap(Map<String, dynamic> map) {
+    return WorkflowComment(
+      id: map['id'] as String,
+      comment: map['comment'] as String,
+      userId: map['userId'] as String,
+      timestamp: (map['timestamp'] as Timestamp).toDate(),
+      attachments: map['attachments'] != null ? List<String>.from(map['attachments'] as List<dynamic>) : null,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'comment': comment,
+      'userId': userId,
+      'timestamp': Timestamp.fromDate(timestamp),
+      'attachments': attachments,
+    };
+  }
+}
+
+class WorkflowHistory {
+  final String id;
+  final String action;
+  final String userId;
+  final DateTime timestamp;
+  final Map<String, dynamic>? details;
+
+  WorkflowHistory({
+    required this.id,
+    required this.action,
+    required this.userId,
+    required this.timestamp,
+    this.details,
+  });
+
+  factory WorkflowHistory.fromMap(Map<String, dynamic> map) {
+    return WorkflowHistory(
+      id: map['id'] as String,
+      action: map['action'] as String,
+      userId: map['userId'] as String,
+      timestamp: (map['timestamp'] as Timestamp).toDate(),
+      details: map['details'] as Map<String, dynamic>?,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'action': action,
+      'userId': userId,
+      'timestamp': Timestamp.fromDate(timestamp),
+      'details': details,
+    };
+  }
+}

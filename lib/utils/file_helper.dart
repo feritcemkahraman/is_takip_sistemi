@@ -107,6 +107,39 @@ class FileHelper {
     return RegExp(r'^[a-zA-Z0-9._-]+$').hasMatch(path);
   }
 
+  // Dosyayı parçalı olarak oku
+  static Stream<List<int>> readFileInChunks(File file, {int chunkSize = 1024 * 1024}) async* {
+    final reader = file.openRead();
+    List<int> buffer = [];
+
+    await for (var chunk in reader) {
+      buffer.addAll(chunk);
+      while (buffer.length >= chunkSize) {
+        yield buffer.sublist(0, chunkSize);
+        buffer = buffer.sublist(chunkSize);
+      }
+    }
+
+    if (buffer.isNotEmpty) {
+      yield buffer;
+    }
+  }
+
+  // Dosyayı parçalı olarak yaz
+  static Future<void> writeFileInChunks(
+    File file,
+    Stream<List<int>> chunks,
+  ) async {
+    final writer = file.openWrite();
+    try {
+      await for (var chunk in chunks) {
+        writer.write(chunk);
+      }
+    } finally {
+      await writer.close();
+    }
+  }
+
   // Dosya transferi için ilerleme durumu
   static Stream<double> transferWithProgress(File source, File destination) async* {
     final length = await source.length();
@@ -116,7 +149,7 @@ class FileHelper {
     final writer = destination.openWrite();
 
     await for (var chunk in reader) {
-      await writer.add(chunk);
+      writer.add(chunk);
       transferred += chunk.length;
       yield transferred / length;
     }
@@ -138,7 +171,7 @@ class FileHelper {
       final writer = destination.openWrite();
 
       await for (var chunk in reader) {
-        await writer.add(chunk);
+        writer.add(chunk);
         transferred += chunk.length;
         onProgress?.call(transferred / length);
       }
@@ -150,4 +183,4 @@ class FileHelper {
       return false;
     }
   }
-} 
+}

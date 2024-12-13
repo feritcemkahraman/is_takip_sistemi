@@ -1,65 +1,77 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UserModel {
-  final String id;
-  final String username;
+  final String uid;
   final String email;
   final String name;
   final String department;
   final String role;
-  final DateTime createdAt;
+  final bool isActive;
 
   UserModel({
-    required this.id,
-    required this.username,
+    required this.uid,
     required this.email,
     required this.name,
     required this.department,
     required this.role,
-    required this.createdAt,
+    this.isActive = true,
   });
 
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return UserModel(
-      id: doc.id,
-      username: data['username'] ?? '',
+      uid: doc.id,
       email: data['email'] ?? '',
       name: data['name'] ?? '',
       department: data['department'] ?? '',
       role: data['role'] ?? 'user',
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      isActive: data['isActive'] ?? true,
     );
   }
 
+  factory UserModel.fromMap(Map<String, dynamic> map) {
+    return UserModel(
+      uid: map['uid'] as String,
+      email: map['email'] as String,
+      name: map['name'] as String,
+      department: map['department'] as String,
+      role: map['role'] as String,
+      isActive: map['isActive'] as bool? ?? true,
+    );
+  }
+
+  // Getter for id (compatibility with existing code)
+  String get id => uid;
+
+  // Getter for username (compatibility with existing code)
+  String get username => name;
+
   Map<String, dynamic> toMap() {
     return {
-      'username': username,
+      'uid': uid,
       'email': email,
       'name': name,
       'department': department,
       'role': role,
-      'createdAt': Timestamp.fromDate(createdAt),
+      'isActive': isActive,
     };
   }
 
   UserModel copyWith({
-    String? id,
-    String? username,
+    String? uid,
     String? email,
     String? name,
     String? department,
     String? role,
-    DateTime? createdAt,
+    bool? isActive,
   }) {
     return UserModel(
-      id: id ?? this.id,
-      username: username ?? this.username,
+      uid: uid ?? this.uid,
       email: email ?? this.email,
       name: name ?? this.name,
       department: department ?? this.department,
       role: role ?? this.role,
-      createdAt: createdAt ?? this.createdAt,
+      isActive: isActive ?? this.isActive,
     );
   }
 

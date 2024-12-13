@@ -19,6 +19,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
+  DateTime? _startDate;
   DateTime? _dueDate;
   String _selectedPriority = 'normal';
   String _selectedDepartment = '';
@@ -40,10 +41,10 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   Future<void> _createTask() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_dueDate == null) {
+    if (_startDate == null || _dueDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Lütfen bir bitiş tarihi seçin'),
+          content: Text('Lütfen başlangıç ve bitiş tarihi seçin'),
           backgroundColor: Colors.red,
         ),
       );
@@ -88,6 +89,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
         assignedTo: _selectedAssignee,
         createdBy: currentUser.uid,
         createdAt: DateTime.now(),
+        startDate: _startDate!,
         dueDate: _dueDate!,
         priority: _selectedPriority,
         status: 'pending',
@@ -204,6 +206,24 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                   setState(() {
                     _selectedPriority = newValue ?? 'normal';
                   });
+                },
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                title: Text(_startDate == null
+                    ? 'Başlangıç Tarihi Seçin'
+                    : 'Başlangıç: ${_startDate!.day}/${_startDate!.month}/${_startDate!.year}'),
+                trailing: const Icon(Icons.calendar_today),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _startDate ?? DateTime.now(),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) {
+                    setState(() => _startDate = picked);
+                  }
                 },
               ),
               const SizedBox(height: 16),

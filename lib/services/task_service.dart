@@ -106,6 +106,99 @@ class TaskService {
     }
   }
 
+  // Görevleri filtreleme ve arama
+  Stream<List<TaskModel>> filterTasks({
+    String? status,
+    String? priority,
+    String? assignedTo,
+    String? searchQuery,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) {
+    try {
+      Query query = _firestore.collection(_collection);
+
+      if (status != null && status.isNotEmpty) {
+        query = query.where('status', isEqualTo: status);
+      }
+
+      if (priority != null && priority.isNotEmpty) {
+        query = query.where('priority', isEqualTo: priority);
+      }
+
+      if (assignedTo != null && assignedTo.isNotEmpty) {
+        query = query.where('assignedTo', isEqualTo: assignedTo);
+      }
+
+      if (startDate != null) {
+        query = query.where('startDate', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
+      }
+
+      if (endDate != null) {
+        query = query.where('dueDate', isLessThanOrEqualTo: Timestamp.fromDate(endDate));
+      }
+
+      return query.snapshots().map((snapshot) {
+        var tasks = snapshot.docs.map((doc) => TaskModel.fromFirestore(doc)).toList();
+
+        if (searchQuery != null && searchQuery.isNotEmpty) {
+          final lowercaseQuery = searchQuery.toLowerCase();
+          tasks = tasks.where((task) {
+            return task.title.toLowerCase().contains(lowercaseQuery) ||
+                   task.description.toLowerCase().contains(lowercaseQuery);
+          }).toList();
+        }
+
+        return tasks;
+      });
+    } catch (e) {
+      print('Görev filtreleme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Yaklaşan görevleri getirme
+  Stream<List<TaskModel>> getUpcomingTasks(String userId) {
+    try {
+      final now = DateTime.now();
+      final nextWeek = now.add(const Duration(days: 7));
+
+      return _firestore
+          .collection(_collection)
+          .where('assignedTo', isEqualTo: userId)
+          .where('dueDate', isGreaterThanOrEqualTo: Timestamp.fromDate(now))
+          .where('dueDate', isLessThanOrEqualTo: Timestamp.fromDate(nextWeek))
+          .where('status', whereIn: ['pending', 'in_progress'])
+          .snapshots()
+          .map((snapshot) => snapshot.docs
+              .map((doc) => TaskModel.fromFirestore(doc))
+              .toList());
+    } catch (e) {
+      print('Yaklaşan görevleri getirme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Geciken görevleri getirme
+  Stream<List<TaskModel>> getOverdueTasks(String userId) {
+    try {
+      final now = DateTime.now();
+
+      return _firestore
+          .collection(_collection)
+          .where('assignedTo', isEqualTo: userId)
+          .where('dueDate', isLessThan: Timestamp.fromDate(now))
+          .where('status', whereIn: ['pending', 'in_progress'])
+          .snapshots()
+          .map((snapshot) => snapshot.docs
+              .map((doc) => TaskModel.fromFirestore(doc))
+              .toList());
+    } catch (e) {
+      print('Geciken görevleri getirme hatası: $e');
+      rethrow;
+    }
+  }
+
   // Yorum ekleme
   Future<void> addComment(String taskId, Comment comment) async {
     try {

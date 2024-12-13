@@ -18,6 +18,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   late DateTime _selectedDay;
   late CalendarFormat _calendarFormat;
   late Map<DateTime, List<CalendarEvent>> _events;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -30,26 +31,33 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   Future<void> _loadEvents() async {
+    setState(() => _isLoading = true);
     try {
+      final now = DateTime.now();
+      final startDate = DateTime(now.year, now.month, 1);
+      final endDate = DateTime(now.year, now.month + 1, 0);
+
       final calendarService = Provider.of<CalendarService>(context, listen: false);
       final authService = Provider.of<AuthService>(context, listen: false);
       final userId = authService.currentUser?.uid;
 
       if (userId == null) return;
 
-      final events = await calendarService.getEvents(userId);
+      final events = await calendarService.getEvents(
+        userId,
+        startDate,
+        endDate,
+      );
+
       setState(() {
         _events = events;
+        _isLoading = false;
       });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Etkinlikler yüklenirken hata: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Takvim olayları yüklenirken hata oluştu: $e')),
+      );
     }
   }
 
@@ -95,40 +103,42 @@ class _CalendarScreenState extends State<CalendarScreen> {
           ),
           const SizedBox(height: 8),
           Expanded(
-            child: ListView.builder(
-              itemCount: _getEventsForDay(_selectedDay).length,
-              itemBuilder: (context, index) {
-                final event = _getEventsForDay(_selectedDay)[index];
-                return Card(
-                  child: ListTile(
-                    leading: Icon(
-                      event.type == 'task'
-                          ? Icons.task
-                          : event.type == 'meeting'
-                              ? Icons.meeting_room
-                              : Icons.event,
-                      color: event.color,
-                    ),
-                    title: Text(event.title),
-                    subtitle: Text(
-                      '${event.startTime.hour}:${event.startTime.minute.toString().padLeft(2, '0')} - ${event.endTime.hour}:${event.endTime.minute.toString().padLeft(2, '0')}',
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              EventDetailScreen(event: event),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : ListView.builder(
+                    itemCount: _getEventsForDay(_selectedDay).length,
+                    itemBuilder: (context, index) {
+                      final event = _getEventsForDay(_selectedDay)[index];
+                      return Card(
+                        child: ListTile(
+                          leading: Icon(
+                            event.type == 'task'
+                                ? Icons.task
+                                : event.type == 'meeting'
+                                    ? Icons.meeting_room
+                                    : Icons.event,
+                            color: event.color,
+                          ),
+                          title: Text(event.title),
+                          subtitle: Text(
+                            '${event.startTime.hour}:${event.startTime.minute.toString().padLeft(2, '0')} - ${event.endTime.hour}:${event.endTime.minute.toString().padLeft(2, '0')}',
+                          ),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    EventDetailScreen(event: event),
+                              ),
+                            );
+                          },
                         ),
                       );
                     },
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
     );
   }
-} 
+}

@@ -43,10 +43,24 @@ class AppConstants {
   static const String errorWeakPassword = 'Şifre çok zayıf';
   static const String errorUsernameAlreadyInUse = 'Bu kullanıcı adı zaten kullanımda';
 
-  // User Roles
+  // Roles
   static const String roleAdmin = 'admin';
-  static const String roleEmployee = 'employee';
+  static const String roleManager = 'manager';
   static const String roleUser = 'user';
+
+  // Role Names
+  static const Map<String, String> roleNames = {
+    roleAdmin: 'Yönetici',
+    roleManager: 'Müdür',
+    roleUser: 'Kullanıcı',
+  };
+
+  // Role List
+  static const List<String> roles = [
+    roleAdmin,
+    roleManager,
+    roleUser,
+  ];
 
   // Departments
   static const List<String> departments = [
@@ -57,6 +71,50 @@ class AppConstants {
     'İnsan Kaynakları',
     'Yazılım / PR',
   ];
+
+  // Task Status
+  static const String taskStatusPending = 'pending';
+  static const String taskStatusInProgress = 'in_progress';
+  static const String taskStatusCompleted = 'completed';
+  static const String taskStatusCancelled = 'cancelled';
+
+  static const Map<String, String> taskStatusNames = {
+    taskStatusPending: 'Beklemede',
+    taskStatusInProgress: 'Devam Ediyor',
+    taskStatusCompleted: 'Tamamlandı',
+    taskStatusCancelled: 'İptal Edildi',
+  };
+
+  static const Map<String, Color> taskStatusColors = {
+    taskStatusPending: Colors.orange,
+    taskStatusInProgress: Colors.blue,
+    taskStatusCompleted: Colors.green,
+    taskStatusCancelled: Colors.red,
+  };
+
+  // Task Priority
+  static const String taskPriorityLow = 'low';
+  static const String taskPriorityNormal = 'normal';
+  static const String taskPriorityHigh = 'high';
+
+  static const Map<String, String> taskPriorityNames = {
+    taskPriorityLow: 'Düşük',
+    taskPriorityNormal: 'Normal',
+    taskPriorityHigh: 'Yüksek',
+  };
+
+  static const Map<String, Color> taskPriorityColors = {
+    taskPriorityLow: Colors.green,
+    taskPriorityNormal: Colors.blue,
+    taskPriorityHigh: Colors.red,
+  };
+
+  // Renk sabitleri
+  static const Color taskEventColor = Colors.blue;
+  static const Color meetingEventColor = Colors.green;
+  static const Color holidayEventColor = Colors.red;
+  static const Color taskEventOverdueColor = Colors.red;
+  static const Color taskEventCompletedColor = Colors.green;
 
   // Task Priorities
   static const String priorityHigh = 'high';
