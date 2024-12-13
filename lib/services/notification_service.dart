@@ -8,9 +8,23 @@ import '../models/notification_model.dart';
 import '../models/workflow_model.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server.dart';
+import 'package:uuid/uuid.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'logging_service.dart';
 
 class NotificationService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
+  final LoggingService _loggingService;
+
+  NotificationService({
+    required FirebaseFirestore firestore,
+    required FirebaseAuth auth,
+    required LoggingService loggingService,
+  })  : _firestore = firestore,
+        _auth = auth,
+        _loggingService = loggingService;
+
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
   final BehaviorSubject<NotificationModel> _notificationSubject = BehaviorSubject<NotificationModel>();
@@ -216,215 +230,357 @@ class NotificationService {
   }
 
   // İş akışı bildirimleri
-  Future<void> sendWorkflowNotifications(
-    WorkflowModel workflow,
-    String action,
-    String userId,
-  ) async {
+  Future<void> sendWorkflowNotification({
+    required String workflowId,
+    required String title,
+    required String message,
+    required String type,
+    required List<String> recipients,
+    Map<String, dynamic>? data,
+    NotificationPriority priority = NotificationPriority.normal,
+    Duration? expiration,
+  }) async {
     try {
-      final now = DateTime.now();
       final notification = NotificationModel(
-        id: now.millisecondsSinceEpoch.toString(),
-        title: 'İş Akışı Güncellendi',
-        body: _getWorkflowNotificationBody(workflow, action),
-        type: NotificationModel.typeWorkflow,
-        userId: userId,
+        id: const Uuid().v4(),
+        title: title,
+        message: message,
+        type: type,
+        priority: priority,
+        recipients: recipients,
         data: {
-          'workflowId': workflow.id,
-          'action': action,
+          ...?data,
+          'workflowId': workflowId,
         },
-        createdAt: now,
+        createdAt: DateTime.now(),
+        expiresAt: expiration != null
+            ? DateTime.now().add(expiration)
+            : null,
+        status: NotificationStatus.unread,
       );
 
-      await createNotification(notification);
-    } catch (e) {
-      print('İş akışı bildirimi gönderme hatası: $e');
+      await _firestore
+          .collection('notifications')
+          .doc(notification.id)
+          .set(notification.toMap());
+
+      // FCM bildirimi gönder
+      await _sendPushNotification(notification);
+
+      await _loggingService.info(
+        'İş akışı bildirimi gönderildi',
+        module: 'notification',
+        data: {
+          'notificationId': notification.id,
+          'workflowId': workflowId,
+          'type': type,
+          'recipientCount': recipients.length,
+        },
+      );
+    } catch (e, stackTrace) {
+      await _loggingService.error(
+        'İş akışı bildirimi gönderme hatası',
+        module: 'notification',
+        error: e,
+        stackTrace: stackTrace,
+        data: {
+          'workflowId': workflowId,
+          'type': type,
+          'recipientCount': recipients.length,
+        },
+      );
       rethrow;
     }
   }
 
-  // Hatırlatıcı bildirimleri
-  Future<void> sendWorkflowReminders() async {
+  // İş akışı ilerleme bildirimleri
+  Future<void> sendProgressNotification({
+    required String workflowId,
+    required String stepId,
+    required double progress,
+    required List<String> recipients,
+  }) async {
     try {
-      final now = DateTime.now();
-      final workflows = await _firestore
-          .collection('workflows')
-          .where('deadline', isGreaterThan: now)
-          .where('status', isEqualTo: WorkflowModel.statusActive)
-          .get();
+      final step = await _getWorkflowStep(workflowId, stepId);
+      if (step == null) return;
 
-      for (final doc in workflows.docs) {
-        final workflow = WorkflowModel.fromMap(doc.data());
-        final deadline = workflow.deadline;
-        if (deadline == null) continue;
+      final message = _generateProgressMessage(progress, step);
+      final type = _getProgressNotificationType(progress);
 
-        final difference = deadline.difference(now);
-        if (difference.inHours <= 24) {
-          // Son 24 saat kaldıysa bildirim gönder
-          final currentStep = workflow.currentStep;
-          if (currentStep != null) {
-            await createNotification(
-              NotificationModel(
-                id: now.millisecondsSinceEpoch.toString(),
-                title: 'İş Akışı Hatırlatıcı',
-                body:
-                    '${workflow.title} iş akışının tamamlanmasına ${_formatDuration(difference)} kaldı',
-                type: NotificationModel.typeReminder,
-                userId: currentStep.assignedTo,
-                data: {
-                  'workflowId': workflow.id,
-                  'type': 'deadline',
-                },
-                createdAt: now,
-              ),
-            );
-          }
-        }
-      }
-    } catch (e) {
-      print('Hatırlatıcı gönderme hatası: $e');
+      await sendWorkflowNotification(
+        workflowId: workflowId,
+        title: 'İş Akışı İlerlemesi',
+        message: message,
+        type: type,
+        recipients: recipients,
+        data: {
+          'stepId': stepId,
+          'progress': progress,
+          'stepTitle': step.title,
+        },
+        priority: _getProgressPriority(progress),
+      );
+    } catch (e, stackTrace) {
+      await _loggingService.error(
+        'İlerleme bildirimi gönderme hatası',
+        module: 'notification',
+        error: e,
+        stackTrace: stackTrace,
+        data: {
+          'workflowId': workflowId,
+          'stepId': stepId,
+          'progress': progress,
+        },
+      );
       rethrow;
     }
   }
 
-  // Toplu bildirim gönderme
-  Future<void> sendBulkNotifications(
-    List<String> userIds,
-    String title,
-    String body,
-    Map<String, dynamic> data,
+  // Gecikme bildirimleri
+  Future<void> sendDelayNotification({
+    required String workflowId,
+    required String stepId,
+    required Duration delay,
+    required List<String> recipients,
+  }) async {
+    try {
+      final step = await _getWorkflowStep(workflowId, stepId);
+      if (step == null) return;
+
+      final message = _generateDelayMessage(delay, step);
+
+      await sendWorkflowNotification(
+        workflowId: workflowId,
+        title: 'İş Akışı Gecikmesi',
+        message: message,
+        type: NotificationType.delay,
+        recipients: recipients,
+        data: {
+          'stepId': stepId,
+          'delay': delay.inMinutes,
+          'stepTitle': step.title,
+        },
+        priority: NotificationPriority.high,
+      );
+    } catch (e, stackTrace) {
+      await _loggingService.error(
+        'Gecikme bildirimi gönderme hatası',
+        module: 'notification',
+        error: e,
+        stackTrace: stackTrace,
+        data: {
+          'workflowId': workflowId,
+          'stepId': stepId,
+          'delay': delay.inMinutes,
+        },
+      );
+      rethrow;
+    }
+  }
+
+  // Kritik durum bildirimleri
+  Future<void> sendCriticalNotification({
+    required String workflowId,
+    required String title,
+    required String message,
+    required List<String> recipients,
+    Map<String, dynamic>? data,
+  }) async {
+    await sendWorkflowNotification(
+      workflowId: workflowId,
+      title: '⚠️ $title',
+      message: message,
+      type: NotificationType.critical,
+      recipients: recipients,
+      data: data,
+      priority: NotificationPriority.critical,
+      expiration: const Duration(hours: 24),
+    );
+  }
+
+  // Bildirim durumu güncelleme
+  Future<void> updateNotificationStatus(
+    String notificationId,
+    String status,
   ) async {
-    try {
-      final now = DateTime.now();
-      final batch = _firestore.batch();
-
-      for (final userId in userIds) {
-        final notification = NotificationModel(
-          id: '${now.millisecondsSinceEpoch}_$userId',
-          title: title,
-          body: body,
-          type: NotificationModel.typeGeneral,
-          userId: userId,
-          data: data,
-          createdAt: now,
-        );
-
-        batch.set(
-          _firestore.collection('notifications').doc(notification.id),
-          notification.toMap(),
-        );
-
-        // FCM token'ı al ve push bildirim gönder
-        final token = await _getUserFCMToken(userId);
-        if (token != null) {
-          await _sendPushNotification(token, title, body, data);
-        }
-
-        // E-posta bildirimi gönder
-        await _sendEmailNotification(userId, title, body);
-      }
-
-      await batch.commit();
-    } catch (e) {
-      print('Toplu bildirim gönderme hatası: $e');
-      rethrow;
-    }
-  }
-
-  // Kullanıcının bildirimlerini getir
-  Stream<List<NotificationModel>> getUserNotifications(String userId) {
-    return _firestore
-        .collection('notifications')
-        .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => NotificationModel.fromMap(doc.data()))
-            .toList());
-  }
-
-  // Bildirimi okundu olarak işaretle
-  Future<void> markAsRead(String notificationId) async {
     try {
       await _firestore
           .collection('notifications')
           .doc(notificationId)
-          .update({'isRead': true});
-    } catch (e) {
-      print('Bildirim güncelleme hatası: $e');
+          .update({'status': status});
+
+      await _loggingService.info(
+        'Bildirim durumu güncellendi',
+        module: 'notification',
+        data: {
+          'notificationId': notificationId,
+          'status': status,
+        },
+      );
+    } catch (e, stackTrace) {
+      await _loggingService.error(
+        'Bildirim durumu güncelleme hatası',
+        module: 'notification',
+        error: e,
+        stackTrace: stackTrace,
+        data: {
+          'notificationId': notificationId,
+          'status': status,
+        },
+      );
       rethrow;
     }
   }
 
-  // Bildirimi sil
-  Future<void> deleteNotification(String notificationId) async {
+  // Yardımcı metodlar
+  Future<WorkflowStep?> _getWorkflowStep(
+    String workflowId,
+    String stepId,
+  ) async {
     try {
-      await _firestore.collection('notifications').doc(notificationId).delete();
-    } catch (e) {
-      print('Bildirim silme hatası: $e');
-      rethrow;
-    }
-  }
+      final doc = await _firestore
+          .collection('workflows')
+          .doc(workflowId)
+          .get();
 
-  // Kullanıcının FCM token'ını al
-  Future<String?> _getUserFCMToken(String userId) async {
-    try {
-      final doc = await _firestore.collection('users').doc(userId).get();
-      return doc.data()?['fcmToken'] as String?;
+      if (!doc.exists) return null;
+
+      final workflow = WorkflowModel.fromMap(doc.data()!);
+      return workflow.steps.firstWhere(
+        (step) => step.id == stepId,
+        orElse: () => throw Exception('Adım bulunamadı'),
+      );
     } catch (e) {
-      print('FCM token getirme hatası: $e');
+      await _loggingService.error(
+        'İş akışı adımı getirme hatası',
+        module: 'notification',
+        error: e,
+        data: {
+          'workflowId': workflowId,
+          'stepId': stepId,
+        },
+      );
       return null;
     }
   }
 
-  // Push bildirim gönder
-  Future<void> _sendPushNotification(
-    String token,
-    String title,
-    String body,
-    Map<String, dynamic> data,
-  ) async {
-    try {
-      await _messaging.sendMessage(
-        to: token,
-        data: data,
-        notification: RemoteNotification(
-          title: title,
-          body: body,
-        ),
-      );
-    } catch (e) {
-      print('Push bildirim gönderme hatası: $e');
+  String _generateProgressMessage(double progress, WorkflowStep step) {
+    if (progress >= 100) {
+      return '${step.title} tamamlandı! 🎉';
+    } else if (progress >= 75) {
+      return '${step.title} son aşamada (${progress.toStringAsFixed(0)}%)';
+    } else if (progress >= 50) {
+      return '${step.title} yarıyı geçti (${progress.toStringAsFixed(0)}%)';
+    } else if (progress >= 25) {
+      return '${step.title} ilerliyor (${progress.toStringAsFixed(0)}%)';
+    } else {
+      return '${step.title} başladı (${progress.toStringAsFixed(0)}%)';
     }
   }
 
-  // E-posta bildirimi gönder
-  Future<void> _sendEmailNotification(
-    String userId,
-    String title,
-    String body,
-  ) async {
+  String _generateDelayMessage(Duration delay, WorkflowStep step) {
+    final hours = delay.inHours;
+    final minutes = delay.inMinutes % 60;
+
+    if (hours > 0) {
+      return '${step.title} $hours saat ${minutes > 0 ? '$minutes dakika' : ''} gecikti!';
+    } else {
+      return '${step.title} $minutes dakika gecikti!';
+    }
+  }
+
+  String _getProgressNotificationType(double progress) {
+    if (progress >= 100) return NotificationType.completion;
+    if (progress >= 75) return NotificationType.majorProgress;
+    if (progress >= 50) return NotificationType.progress;
+    if (progress >= 25) return NotificationType.minorProgress;
+    return NotificationType.start;
+  }
+
+  NotificationPriority _getProgressPriority(double progress) {
+    if (progress >= 100) return NotificationPriority.high;
+    if (progress >= 75) return NotificationPriority.normal;
+    return NotificationPriority.low;
+  }
+
+  Future<void> _sendPushNotification(NotificationModel notification) async {
     try {
-      final userDoc = await _firestore.collection('users').doc(userId).get();
-      final email = userDoc.data()?['email'] as String?;
-      if (email == null) return;
+      // FCM token'larını getir
+      final tokens = await _getRecipientTokens(notification.recipients);
+      if (tokens.isEmpty) return;
 
-      final smtpServer = SmtpServer(
-        _smtpHost,
-        port: _smtpPort,
-        username: _smtpUsername,
-        password: _smtpPassword,
+      // FCM mesajını oluştur
+      final message = {
+        'notification': {
+          'title': notification.title,
+          'body': notification.message,
+        },
+        'data': {
+          'type': notification.type,
+          'id': notification.id,
+          ...notification.data,
+        },
+        'android': {
+          'priority': notification.priority == NotificationPriority.critical
+              ? 'high'
+              : 'normal',
+          'notification': {
+            'channel_id': 'workflow_notifications',
+          },
+        },
+        'apns': {
+          'payload': {
+            'aps': {
+              'sound': notification.priority == NotificationPriority.critical
+                  ? 'critical.wav'
+                  : 'default',
+            },
+          },
+        },
+        'tokens': tokens,
+      };
+
+      // FCM isteği gönder
+      await FirebaseMessaging.instance.sendMulticast(
+        MulticastMessage.fromMap(message),
       );
+    } catch (e, stackTrace) {
+      await _loggingService.error(
+        'Push bildirimi gönderme hatası',
+        module: 'notification',
+        error: e,
+        stackTrace: stackTrace,
+        data: {
+          'notificationId': notification.id,
+          'recipientCount': notification.recipients.length,
+        },
+      );
+    }
+  }
 
-      final message = Message()
-        ..from = Address(_smtpUsername)
-        ..recipients.add(email)
-        ..subject = title
-        ..text = body;
+  Future<List<String>> _getRecipientTokens(List<String> userIds) async {
+    try {
+      final tokens = <String>[];
+      for (final userId in userIds) {
+        final doc = await _firestore
+            .collection('users')
+            .doc(userId)
+            .collection('tokens')
+            .get();
 
-      await send(message, smtpServer);
+        tokens.addAll(doc.docs.map((d) => d.id));
+      }
+      return tokens;
     } catch (e) {
-      print('E-posta gönderme hatası: $e');
+      await _loggingService.error(
+        'FCM token getirme hatası',
+        module: 'notification',
+        error: e,
+        data: {
+          'userCount': userIds.length,
+        },
+      );
+      return [];
     }
   }
 
@@ -750,4 +906,32 @@ class NotificationService {
     // Auth servisinden kullanıcı ID'si alınacak
     return null;
   }
+}
+
+// Bildirim tipleri
+class NotificationType {
+  static const String start = 'start';
+  static const String progress = 'progress';
+  static const String minorProgress = 'minor_progress';
+  static const String majorProgress = 'major_progress';
+  static const String completion = 'completion';
+  static const String delay = 'delay';
+  static const String critical = 'critical';
+  static const String error = 'error';
+}
+
+// Bildirim öncelikleri
+class NotificationPriority {
+  static const String low = 'low';
+  static const String normal = 'normal';
+  static const String high = 'high';
+  static const String critical = 'critical';
+}
+
+// Bildirim durumları
+class NotificationStatus {
+  static const String unread = 'unread';
+  static const String read = 'read';
+  static const String archived = 'archived';
+  static const String deleted = 'deleted';
 } 
