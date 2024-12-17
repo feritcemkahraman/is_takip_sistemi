@@ -1,6 +1,6 @@
 buildscript {
     ext {
-        kotlin_version = '1.7.10'
+        kotlin_version = '1.9.22'
         java_version = JavaVersion.VERSION_17
     }
     repositories {
@@ -9,9 +9,11 @@ buildscript {
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.0.0'
+        classpath 'com.android.tools.build:gradle:8.2.1'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-        classpath 'com.google.gms:google-services:4.3.15'
+        classpath 'com.google.gms:google-services:4.4.0'
+        classpath 'com.google.firebase:firebase-crashlytics-gradle:2.9.9'
+        classpath 'com.google.firebase:perf-plugin:1.4.2'
     }
 }
 
@@ -65,6 +67,16 @@ subprojects {
                         jvmTarget = java_version.toString()
                     }
                 }
+            }
+        }
+    }
+    
+    project.evaluationDependsOn(':app')
+    project.configurations.all {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'androidx.core' &&
+                !details.requested.name.contains('androidx')) {
+                details.useVersion "1.10.1"
             }
         }
     }

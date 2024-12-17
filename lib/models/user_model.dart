@@ -1,81 +1,104 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart' as auth;
 
 class UserModel {
-  final String uid;
-  final String email;
+  final String id;
   final String name;
-  final String department;
+  final String email;
+  final String username;
   final String role;
-  final bool isActive;
+  final String department;
+  final String? avatar;
+  final String? phoneNumber;
+  final String? title;
+  final DateTime createdAt;
+  final DateTime? lastLoginAt;
+
+  static const String roleAdmin = 'admin';
+  static const String roleUser = 'user';
+  static const String roleEmployee = 'employee';
 
   UserModel({
-    required this.uid,
-    required this.email,
+    required this.id,
     required this.name,
-    required this.department,
+    required this.email,
+    required this.username,
     required this.role,
-    this.isActive = true,
+    required this.department,
+    this.avatar,
+    this.phoneNumber,
+    this.title,
+    required this.createdAt,
+    this.lastLoginAt,
   });
 
-  factory UserModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return UserModel(
-      uid: doc.id,
-      email: data['email'] ?? '',
-      name: data['name'] ?? '',
-      department: data['department'] ?? '',
-      role: data['role'] ?? 'user',
-      isActive: data['isActive'] ?? true,
-    );
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'email': email,
+      'username': username,
+      'role': role,
+      'department': department,
+      'avatar': avatar,
+      'phoneNumber': phoneNumber,
+      'title': title,
+      'createdAt': createdAt.toIso8601String(),
+      'lastLoginAt': lastLoginAt?.toIso8601String(),
+    };
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
-      uid: map['uid'] as String,
-      email: map['email'] as String,
-      name: map['name'] as String,
-      department: map['department'] as String,
-      role: map['role'] as String,
-      isActive: map['isActive'] as bool? ?? true,
+      id: map['id'] ?? '',
+      name: map['name'] ?? '',
+      email: map['email'] ?? '',
+      username: map['username'] ?? '',
+      role: map['role'] ?? '',
+      department: map['department'] ?? '',
+      avatar: map['avatar'],
+      phoneNumber: map['phoneNumber'],
+      title: map['title'],
+      createdAt: map['createdAt'] is Timestamp 
+          ? (map['createdAt'] as Timestamp).toDate()
+          : DateTime.parse(map['createdAt'] ?? DateTime.now().toIso8601String()),
+      lastLoginAt: map['lastLoginAt'] != null 
+          ? map['lastLoginAt'] is Timestamp
+              ? (map['lastLoginAt'] as Timestamp).toDate()
+              : DateTime.parse(map['lastLoginAt'])
+          : null,
     );
   }
 
-  // Getter for id (compatibility with existing code)
-  String get id => uid;
-
-  // Getter for username (compatibility with existing code)
-  String get username => name;
-
-  Map<String, dynamic> toMap() {
-    return {
-      'uid': uid,
-      'email': email,
-      'name': name,
-      'department': department,
-      'role': role,
-      'isActive': isActive,
-    };
+  factory UserModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data()!;
+    return UserModel.fromMap({...data, 'id': doc.id});
   }
 
   UserModel copyWith({
-    String? uid,
-    String? email,
+    String? id,
     String? name,
-    String? department,
+    String? email,
+    String? username,
     String? role,
-    bool? isActive,
+    String? department,
+    String? avatar,
+    String? phoneNumber,
+    String? title,
+    DateTime? createdAt,
+    DateTime? lastLoginAt,
   }) {
     return UserModel(
-      uid: uid ?? this.uid,
-      email: email ?? this.email,
+      id: id ?? this.id,
       name: name ?? this.name,
-      department: department ?? this.department,
+      email: email ?? this.email,
+      username: username ?? this.username,
       role: role ?? this.role,
-      isActive: isActive ?? this.isActive,
+      department: department ?? this.department,
+      avatar: avatar ?? this.avatar,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      title: title ?? this.title,
+      createdAt: createdAt ?? this.createdAt,
+      lastLoginAt: lastLoginAt ?? this.lastLoginAt,
     );
-  }
-
-  bool isAdmin() {
-    return role == 'admin';
   }
 }

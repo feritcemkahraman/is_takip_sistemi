@@ -1,49 +1,36 @@
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
 class CalendarEvent {
   final String id;
   final String title;
   final String description;
-  final DateTime startTime;
-  final DateTime endTime;
-  final String type;
+  final DateTime startDate;
+  final DateTime endDate;
   final String createdBy;
   final DateTime createdAt;
+  final String type;
   final String color;
   final bool isAllDay;
-  final String? relatedId;
-  final String? meetingPlatform;
-  final String? location;
-  final bool isOnline;
   final List<String> attendees;
+  final String? location;
+  final String? url;
   final Map<String, dynamic>? metadata;
-
-  static const String typeMeeting = 'meeting';
-  static const String typeTask = 'task';
-  static const String typePersonal = 'personal';
-
-  static const String platformTeams = 'teams';
-  static const String platformZoom = 'zoom';
-  static const String platformSkype = 'skype';
-  static const String platformMeet = 'meet';
 
   CalendarEvent({
     required this.id,
     required this.title,
     required this.description,
-    required this.startTime,
-    required this.endTime,
-    required this.type,
+    required this.startDate,
+    required this.endDate,
     required this.createdBy,
     required this.createdAt,
+    required this.type,
     required this.color,
     this.isAllDay = false,
-    this.relatedId,
-    this.meetingPlatform,
-    this.location,
-    this.isOnline = true,
     this.attendees = const [],
+    this.location,
+    this.url,
     this.metadata,
   });
 
@@ -52,18 +39,16 @@ class CalendarEvent {
       id: map['id'] as String,
       title: map['title'] as String,
       description: map['description'] as String,
-      startTime: (map['startTime'] as Timestamp).toDate(),
-      endTime: (map['endTime'] as Timestamp).toDate(),
-      type: map['type'] as String,
+      startDate: (map['startDate'] as Timestamp).toDate(),
+      endDate: (map['endDate'] as Timestamp).toDate(),
       createdBy: map['createdBy'] as String,
       createdAt: (map['createdAt'] as Timestamp).toDate(),
+      type: map['type'] as String,
       color: map['color'] as String,
       isAllDay: map['isAllDay'] as bool? ?? false,
-      relatedId: map['relatedId'] as String?,
-      meetingPlatform: map['meetingPlatform'] as String?,
-      location: map['location'] as String?,
-      isOnline: map['isOnline'] as bool? ?? true,
       attendees: List<String>.from(map['attendees'] as List<dynamic>? ?? []),
+      location: map['location'] as String?,
+      url: map['url'] as String?,
       metadata: map['metadata'] as Map<String, dynamic>?,
     );
   }
@@ -73,56 +58,72 @@ class CalendarEvent {
       'id': id,
       'title': title,
       'description': description,
-      'startTime': Timestamp.fromDate(startTime),
-      'endTime': Timestamp.fromDate(endTime),
-      'type': type,
+      'startDate': Timestamp.fromDate(startDate),
+      'endDate': Timestamp.fromDate(endDate),
       'createdBy': createdBy,
       'createdAt': Timestamp.fromDate(createdAt),
+      'type': type,
       'color': color,
       'isAllDay': isAllDay,
-      'relatedId': relatedId,
-      'meetingPlatform': meetingPlatform,
-      'location': location,
-      'isOnline': isOnline,
       'attendees': attendees,
+      'location': location,
+      'url': url,
       'metadata': metadata,
     };
   }
+
+  Duration getDuration() {
+    return endDate.difference(startDate);
+  }
+
+  bool isOngoing() {
+    final now = DateTime.now();
+    return now.isAfter(startDate) && now.isBefore(endDate);
+  }
+
+  bool isUpcoming() {
+    return DateTime.now().isBefore(startDate);
+  }
+
+  bool isPast() {
+    return DateTime.now().isAfter(endDate);
+  }
+
+  bool hasAttendees() => attendees.isNotEmpty;
+  bool hasLocation() => location != null && location!.isNotEmpty;
+  bool hasUrl() => url != null && url!.isNotEmpty;
+  bool hasMetadata() => metadata != null && metadata!.isNotEmpty;
 
   CalendarEvent copyWith({
     String? id,
     String? title,
     String? description,
-    DateTime? startTime,
-    DateTime? endTime,
-    String? type,
+    DateTime? startDate,
+    DateTime? endDate,
     String? createdBy,
     DateTime? createdAt,
+    String? type,
     String? color,
     bool? isAllDay,
-    String? relatedId,
-    String? meetingPlatform,
-    String? location,
-    bool? isOnline,
     List<String>? attendees,
+    String? location,
+    String? url,
     Map<String, dynamic>? metadata,
   }) {
     return CalendarEvent(
       id: id ?? this.id,
       title: title ?? this.title,
       description: description ?? this.description,
-      startTime: startTime ?? this.startTime,
-      endTime: endTime ?? this.endTime,
-      type: type ?? this.type,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
+      type: type ?? this.type,
       color: color ?? this.color,
       isAllDay: isAllDay ?? this.isAllDay,
-      relatedId: relatedId ?? this.relatedId,
-      meetingPlatform: meetingPlatform ?? this.meetingPlatform,
-      location: location ?? this.location,
-      isOnline: isOnline ?? this.isOnline,
       attendees: attendees ?? this.attendees,
+      location: location ?? this.location,
+      url: url ?? this.url,
       metadata: metadata ?? this.metadata,
     );
   }

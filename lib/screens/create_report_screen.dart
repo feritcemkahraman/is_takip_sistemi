@@ -64,13 +64,19 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
 
       if (currentUser == null) throw 'Kullanıcı bulunamadı';
 
-      await reportService.createReport(
+      await reportService.createReport(ReportModel(
+        id: '',
         title: _titleController.text.trim(),
         type: _selectedType,
         startDate: _startDate,
         endDate: _endDate,
         createdBy: currentUser.uid,
-      );
+        createdAt: DateTime.now(),
+        data: {},
+        userId: currentUser.uid,
+        totalTasks: 0,
+        completedTasks: 0,
+      ));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -114,7 +120,7 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
             children: [
               CustomTextField(
                 controller: _titleController,
-                labelText: 'Rapor Başlığı',
+                label: 'Rapor Başlığı',
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Lütfen bir başlık girin';
@@ -194,4 +200,4 @@ class _CreateReportScreenState extends State<CreateReportScreen> {
       ),
     );
   }
-} 
+}

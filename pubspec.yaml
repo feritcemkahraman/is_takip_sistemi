@@ -1,10 +1,12 @@
 name: is_takip_sistemi
-description: "A new Flutter project."
-publish_to: "none"
+description: İş Takip Sistemi
+
+publish_to: 'none'
+
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.2.3 <4.0.0"
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -16,33 +18,22 @@ dependencies:
   firebase_auth: ^4.15.3
   cloud_firestore: ^4.13.6
   provider: ^6.1.1
+  shared_preferences: ^2.2.2
   intl: ^0.18.1
-  firebase_storage: ^11.5.6
-  firebase_messaging: ^14.7.9
-  firebase_crashlytics: ^3.4.9
-  firebase_analytics: ^10.7.4
-  mailer: ^6.1.0
-  flutter_local_notifications: ^16.3.0
-  audioplayers: ^5.2.1
-  emoji_picker_flutter: ^1.6.3
-  flutter_sound: ^9.2.13
-  image_picker: ^1.0.5
+  fl_chart: ^0.65.0
   file_picker: ^6.1.1
-  table_calendar: ^3.0.9
-  googleapis: ^13.0.0
-  googleapis_auth: ^1.4.1
-  url_launcher: ^6.2.2
-  pdf: ^3.10.7
-  excel: ^2.1.0
-  path_provider: ^2.1.2
-  share_plus: ^7.2.1
-  rxdart: ^0.27.7
+  timeago: ^3.5.0
+  share_plus: ^7.1.0
+  path_provider: ^2.1.1
+  flutter_typeahead: ^4.7.0
+  firebase_storage: ^11.2.6
+  firebase_messaging: ^14.7.10
+  http: ^1.1.2
+  image_picker: ^1.0.7
+  url_launcher: ^6.2.4
+  emoji_picker_flutter: ^1.6.3
   record: ^5.0.4
   permission_handler: ^11.1.0
-  timeago: ^3.6.0
-  fl_chart: ^0.65.0
-  uuid: ^3.0.7
-  csv: ^5.1.1
 
 dev_dependencies:
   flutter_test:
@@ -51,3 +42,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/

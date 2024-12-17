@@ -1,194 +1,134 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/report_model.dart';
 import '../services/report_service.dart';
 import '../services/auth_service.dart';
-import '../models/report_model.dart';
-import '../constants/app_theme.dart';
-import 'create_report_screen.dart';
+import '../constants/app_constants.dart';
 import 'report_detail_screen.dart';
+import 'create_report_screen.dart';
 
-class ReportListScreen extends StatelessWidget {
-  const ReportListScreen({super.key});
+class ReportListScreen extends StatefulWidget {
+  final String? userId;
+  final bool isAdminView;
+
+  const ReportListScreen({
+    Key? key,
+    this.userId,
+    this.isAdminView = false,
+  }) : super(key: key);
+
+  @override
+  State<ReportListScreen> createState() => _ReportListScreenState();
+}
+
+class _ReportListScreenState extends State<ReportListScreen> {
+  late ReportService _reportService;
+
+  @override
+  void initState() {
+    super.initState();
+    _reportService = Provider.of<ReportService>(context, listen: false);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context);
-    final reportService = Provider.of<ReportService>(context);
-    final currentUser = authService.currentUser;
-
-    if (currentUser == null) {
-      return const Center(child: Text('Kullanıcı bulunamadı'));
-    }
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Raporlar'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CreateReportScreen(),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: StreamBuilder<List<ReportModel>>(
-        stream: reportService.getReports(currentUser.uid),
+      body: FutureBuilder<String?>(
+        future: Future.value(
+          Provider.of<AuthService>(context, listen: false).currentUser?.uid,
+        ),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
           if (snapshot.hasError) {
             return Center(child: Text('Hata: ${snapshot.error}'));
           }
 
-          final reports = snapshot.data ?? [];
-
-          if (reports.isEmpty) {
-            return const Center(
-              child: Text('Henüz rapor oluşturulmamış'),
-            );
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(8),
-            itemCount: reports.length,
-            itemBuilder: (context, index) {
-              final report = reports[index];
-              return _ReportCard(report: report);
+          final userId = snapshot.data!;
+
+          return StreamBuilder<List<ReportModel>>(
+            stream: _getReportsStream(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Center(child: Text('Hata: ${snapshot.error}'));
+              }
+
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final reports = snapshot.data!;
+              if (reports.isEmpty) {
+                return const Center(child: Text('Henüz rapor oluşturulmamış'));
+              }
+
+              return ListView.builder(
+                itemCount: reports.length,
+                itemBuilder: (context, index) {
+                  final report = reports[index];
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: ListTile(
+                      title: Text(report.title),
+                      subtitle: Text(
+                        '${AppConstants.reportTypeLabels[report.type] ?? report.type}\n'
+                        'Oluşturulma: ${report.createdAt.day}/${report.createdAt.month}/${report.createdAt.year}',
+                      ),
+                      trailing: Text(
+                        '%${(report.completionRate * 100).toStringAsFixed(1)}',
+                        style: TextStyle(
+                          color: report.completionRate >= 0.7
+                              ? Colors.green
+                              : report.completionRate >= 0.3
+                                  ? Colors.orange
+                                  : Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ReportDetailScreen(
+                              reportId: report.id,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              );
             },
           );
         },
       ),
-    );
-  }
-}
-
-class _ReportCard extends StatelessWidget {
-  final ReportModel report;
-
-  const _ReportCard({required this.report});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        onTap: () {
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ReportDetailScreen(report: report),
+              builder: (context) => const CreateReportScreen(),
             ),
           );
         },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      report.title,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      ReportModel.getTitle(report.type),
-                      style: TextStyle(
-                        color: Colors.blue[700],
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Tarih Aralığı: ${report.startDate.day}/${report.startDate.month}/${report.startDate.year} - ${report.endDate.day}/${report.endDate.month}/${report.endDate.year}',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Oluşturulma: ${report.createdAt.day}/${report.createdAt.month}/${report.createdAt.year}',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  _buildStat(
-                    'Toplam',
-                    report.getTotalTasks().toString(),
-                    Icons.assignment,
-                  ),
-                  const SizedBox(width: 16),
-                  _buildStat(
-                    'Tamamlanan',
-                    report.getCompletedTasks().toString(),
-                    Icons.check_circle,
-                  ),
-                  const SizedBox(width: 16),
-                  _buildStat(
-                    'Oran',
-                    '%${report.getCompletionRate().toStringAsFixed(1)}',
-                    Icons.pie_chart,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+        child: const Icon(Icons.add),
       ),
     );
   }
 
-  Widget _buildStat(String label, String value, IconData icon) {
-    return Expanded(
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: Colors.grey),
-          const SizedBox(width: 4),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                ),
-              ),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
+  Stream<List<ReportModel>> _getReportsStream() {
+    if (widget.isAdminView) {
+      return _reportService.getAllReportsStream();
+    } else if (widget.userId != null) {
+      return _reportService.getReportsByUser(widget.userId!);
+    } else {
+      return _reportService.getAllReportsStream();
+    }
   }
 } 

@@ -1,202 +1,180 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
+import '../models/user_model.dart';
 import '../services/chat_service.dart';
-import '../widgets/message_bubble.dart';
-import '../widgets/chat_input.dart';
+import '../services/user_service.dart';
 import 'chat_info_screen.dart';
+import '../widgets/message_bubble.dart';
+import '../widgets/emoji_picker_widget.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final ChatModel chat;
-  final String currentUserId;
 
   const ChatDetailScreen({
-    super.key,
+    Key? key,
     required this.chat,
-    required this.currentUserId,
-  });
+  }) : super(key: key);
 
   @override
   State<ChatDetailScreen> createState() => _ChatDetailScreenState();
 }
 
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
-  final _chatService = ChatService();
-  final _scrollController = ScrollController();
-  final _textController = TextEditingController();
-  bool _isAttachmentMenuOpen = false;
-  MessageModel? _replyMessage;
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  late ChatService _chatService;
+  late UserService _userService;
+  bool _isEmojiVisible = false;
+  UserModel? _currentUser;
 
   @override
-  void dispose() {
-    _scrollController.dispose();
-    _textController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _chatService = Provider.of<ChatService>(context, listen: false);
+    _userService = Provider.of<UserService>(context, listen: false);
+    _loadCurrentUser();
   }
 
-  void _handleSendMessage(String text) async {
-    if (text.trim().isEmpty) return;
-
-    await _chatService.sendMessage(
-      chatId: widget.chat.id,
-      content: text,
-      type: MessageModel.typeText,
-      senderId: widget.currentUserId,
-      replyTo: _replyMessage?.id,
-    );
-
-    _textController.clear();
-    setState(() => _replyMessage = null);
-  }
-
-  void _handleAttachmentPressed(String type) async {
-    setState(() => _isAttachmentMenuOpen = false);
-
-    switch (type) {
-      case 'image':
-        final picker = ImagePicker();
-        final image = await picker.pickImage(source: ImageSource.gallery);
-        if (image != null) {
-          await _chatService.sendFileMessage(
-            chatId: widget.chat.id,
-            senderId: widget.currentUserId,
-            filePath: image.path,
-            fileName: image.name,
-            type: MessageModel.typeImage,
-            replyTo: _replyMessage?.id,
-          );
-        }
-        break;
-
-      case 'file':
-        final result = await FilePicker.platform.pickFiles();
-        if (result != null) {
-          final file = File(result.files.single.path!);
-          await _chatService.sendFileMessage(
-            chatId: widget.chat.id,
-            senderId: widget.currentUserId,
-            filePath: file.path,
-            fileName: result.files.single.name,
-            type: MessageModel.typeFile,
-            replyTo: _replyMessage?.id,
-          );
-        }
-        break;
-
-      case 'voice':
-        // TODO: Sesli mesaj kaydetme özelliği eklenecek
-        break;
-    }
-
-    setState(() => _replyMessage = null);
-  }
-
-  void _handleMessageLongPress(MessageModel message) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (message.senderId == widget.currentUserId)
-                ListTile(
-                  leading: const Icon(Icons.delete),
-                  title: const Text('Sil'),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _chatService.deleteMessage(
-                      widget.chat.id,
-                      message.id,
-                    );
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.reply),
-                title: const Text('Yanıtla'),
-                onTap: () {
-                  Navigator.pop(context);
-                  setState(() => _replyMessage = message);
-                },
-              ),
-              if (!message.isReadBy(widget.currentUserId))
-                ListTile(
-                  leading: const Icon(Icons.mark_chat_read),
-                  title: const Text('Okundu olarak işaretle'),
-                  onTap: () async {
-                    Navigator.pop(context);
-                    await _chatService.markMessageAsRead(
-                      widget.chat.id,
-                      message.id,
-                      widget.currentUserId,
-                    );
-                  },
-                ),
-            ],
-          ),
+  Future<void> _loadCurrentUser() async {
+    try {
+      final user = await _chatService.getCurrentUser();
+      setState(() => _currentUser = user);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Kullanıcı bilgileri yüklenemedi: $e')),
         );
-      },
-    );
+      }
+    }
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        if (!mounted) return;
+        await _chatService.sendFileMessage(
+          widget.chat.id,
+          image.path,
+          'image',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Resim gönderilemedi: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles();
+      if (result != null) {
+        final file = File(result.files.single.path!);
+        if (!mounted) return;
+        await _chatService.sendFileMessage(
+          widget.chat.id,
+          file.path,
+          'file',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Dosya gönderilemedi: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteMessage(MessageModel message) async {
+    try {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Mesajı Sil'),
+          content: const Text('Bu mesajı silmek istediğinize emin misiniz?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('İptal'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Sil'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm == true && mounted) {
+        await _chatService.deleteMessage(
+          widget.chat.id,
+          message.id,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Mesaj silinemedi: $e')),
+        );
+      }
+    }
+  }
+
+  void _toggleEmojiPicker() {
+    setState(() => _isEmojiVisible = !_isEmojiVisible);
+  }
+
+  void _onEmojiSelected(String emoji) {
+    _messageController.text += emoji;
+  }
+
+  Future<void> _sendMessage() async {
+    final message = _messageController.text.trim();
+    if (message.isEmpty) return;
+
+    try {
+      await _chatService.sendMessage(
+        widget.chat.id,
+        message,
+        'text',
+      );
+      _messageController.clear();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Mesaj gönderilemedi: $e')),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ChatInfoScreen(
-                  chat: widget.chat,
-                  currentUserId: widget.currentUserId,
-                ),
-              ),
-            );
-          },
-          child: Row(
-            children: [
-              CircleAvatar(
-                backgroundImage: widget.chat
-                        .getChatAvatar(widget.currentUserId)
-                        .startsWith('http')
-                    ? NetworkImage(widget.chat.getChatAvatar(widget.currentUserId))
-                    : AssetImage(widget.chat.getChatAvatar(widget.currentUserId))
-                        as ImageProvider,
-                radius: 20,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.chat.getChatName(widget.currentUserId),
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                    if (widget.chat.isGroupChat)
-                      Text(
-                        '${widget.chat.participants.length} üye',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white70,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+        title: Text(widget.chat.name),
         actions: [
           IconButton(
-            icon: const Icon(Icons.more_vert),
+            icon: const Icon(Icons.info_outline),
             onPressed: () {
-              // TODO: Sohbet menüsü
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChatInfoScreen(
+                    chat: widget.chat,
+                  ),
+                ),
+              );
             },
           ),
         ],
@@ -209,110 +187,103 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(
-                    child: Text('Bir hata oluştu: ${snapshot.error}'),
+                    child: Text('Hata: ${snapshot.error}'),
                   );
                 }
 
                 if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final messages = snapshot.data!;
-                if (messages.isEmpty) {
                   return const Center(
-                    child: Text('Henüz mesaj yok'),
+                    child: CircularProgressIndicator(),
                   );
                 }
 
+                final messages = snapshot.data!;
                 return ListView.builder(
                   controller: _scrollController,
                   reverse: true,
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final message = messages[index];
-                    final isMe = message.senderId == widget.currentUserId;
+                    final isMe = _currentUser?.id == message.senderId;
 
                     return MessageBubble(
                       message: message,
                       isMe: isMe,
-                      chat: widget.chat,
-                      onLongPress: () => _handleMessageLongPress(message),
+                      onLongPress: isMe ? () => _deleteMessage(message) : null,
                     );
                   },
                 );
               },
             ),
           ),
-          if (_replyMessage != null)
-            Container(
-              padding: const EdgeInsets.all(8),
-              color: Colors.grey[200],
-              child: Row(
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  blurRadius: 5,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              child: Column(
                 children: [
-                  const Icon(Icons.reply, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
+                  if (_isEmojiVisible)
+                    EmojiPickerWidget(
+                      onEmojiSelected: _onEmojiSelected,
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Row(
                       children: [
-                        Text(
-                          _replyMessage!.senderId == widget.currentUserId
-                              ? 'Sen'
-                              : widget.chat
-                                  .participantNames[_replyMessage!.senderId]!,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+                        IconButton(
+                          icon: Icon(
+                            _isEmojiVisible
+                                ? Icons.keyboard
+                                : Icons.emoji_emotions_outlined,
+                          ),
+                          onPressed: _toggleEmojiPicker,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.attach_file),
+                          onPressed: _pickFile,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.image),
+                          onPressed: _pickImage,
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: _messageController,
+                            decoration: const InputDecoration(
+                              hintText: 'Mesaj yazın...',
+                              border: InputBorder.none,
+                            ),
+                            onSubmitted: (_) => _sendMessage(),
                           ),
                         ),
-                        Text(
-                          _replyMessage!.content,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12),
+                        IconButton(
+                          icon: const Icon(Icons.send),
+                          onPressed: _sendMessage,
                         ),
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPressed: () => setState(() => _replyMessage = null),
-                  ),
                 ],
               ),
             ),
-          ChatInput(
-            controller: _textController,
-            onSendPressed: _handleSendMessage,
-            onAttachmentPressed: () {
-              setState(() => _isAttachmentMenuOpen = !_isAttachmentMenuOpen);
-            },
           ),
-          if (_isAttachmentMenuOpen)
-            Container(
-              padding: const EdgeInsets.all(8),
-              color: Colors.grey[200],
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.image),
-                    onPressed: () => _handleAttachmentPressed('image'),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.attach_file),
-                    onPressed: () => _handleAttachmentPressed('file'),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.mic),
-                    onPressed: () => _handleAttachmentPressed('voice'),
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 } 

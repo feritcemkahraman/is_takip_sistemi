@@ -1,11 +1,67 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read, write: if true;
+    // Yardımcı fonksiyonlar
+    function isAuthenticated() {
+      return request.auth != null;
     }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Kullanıcılar koleksiyonu
+    match /users/{userId} {
+      // Giriş için tüm kullanıcı verilerini okumaya izin ver
+      allow list: if true;
+      allow get: if true;
+      allow write: if isAdmin() || isOwner(userId);
+    }
+
+    // Görevler koleksiyonu
+    match /tasks/{taskId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin() || 
+        (isAuthenticated() && resource.data.assignedTo.hasAny([request.auth.uid]));
+    }
+
+    // Bildirimler koleksiyonu
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && 
+        (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // Sohbetler koleksiyonu
+    match /chats/{chatId} {
+      allow read, write: if isAuthenticated() && 
+        (resource.data.participants.hasAny([request.auth.uid]) || isAdmin());
+    }
+
+    // Raporlar koleksiyonu
+    match /reports/{reportId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin() || 
+        (isAuthenticated() && request.auth.uid == request.resource.data.createdBy);
+    }
+
+    // Departmanlar koleksiyonu
+    match /departments/{departmentId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Varsayılan olarak tüm erişimi reddet
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
-} 
+}

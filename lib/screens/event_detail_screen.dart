@@ -16,7 +16,10 @@ class EventDetailScreen extends StatefulWidget {
 }
 
 class _EventDetailScreenState extends State<EventDetailScreen> {
-  final UserService _userService = UserService();
+  final UserService _userService = UserService(
+    firestore: FirebaseFirestore.instance,
+    loggingService: LoggingService(),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +42,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                       children: [
                         Icon(
                           Icons.event,
-                          color: widget.event.color,
+                          color: Color(int.parse(widget.event.color)),
                           size: 32,
                         ),
                         const SizedBox(width: 16),

@@ -60,26 +60,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      final user = authService.currentUser;
+      final currentUser = await authService.getCurrentUserModel();
 
-      if (user == null) {
+      if (currentUser == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Kullanıcı oturumu bulunamadı')),
         );
         return;
       }
 
-      await authService.updateUser(
-        user.uid,
-        {
-          'displayName': _nameController.text,
-          'department': _selectedDepartment,
-        },
-      );
+      await authService.updateUser(currentUser.copyWith(
+        name: _nameController.text,
+        department: _selectedDepartment,
+      ));
 
       if (_currentPasswordController.text.isNotEmpty &&
           _newPasswordController.text.isNotEmpty) {
         await authService.updateUserPassword(
+          _currentPasswordController.text,
           _newPasswordController.text,
         );
       }
@@ -114,8 +112,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       await authService.changePassword(
-        currentPassword: _currentPasswordController.text,
-        newPassword: _newPasswordController.text,
+        _currentPasswordController.text,
+        _newPasswordController.text,
       );
 
       if (mounted) {
@@ -148,6 +146,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profilim'),
+        backgroundColor: AppTheme.primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -167,8 +172,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   CustomTextField(
                     controller: _nameController,
-                    labelText: 'Ad Soyad',
-                    prefixIcon: Icons.person,
+                    label: 'Ad Soyad',
                     enabled: _isEditing,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
@@ -180,8 +184,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 16),
                   CustomTextField(
                     controller: _emailController,
-                    labelText: 'E-posta',
-                    prefixIcon: Icons.email,
+                    label: 'E-posta',
                     enabled: false,
                   ),
                   const SizedBox(height: 16),
@@ -245,22 +248,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 24),
             CustomTextField(
               controller: _currentPasswordController,
-              labelText: 'Mevcut Şifre',
-              prefixIcon: Icons.lock,
+              label: 'Mevcut Şifre',
               obscureText: true,
             ),
             const SizedBox(height: 16),
             CustomTextField(
               controller: _newPasswordController,
-              labelText: 'Yeni Şifre',
-              prefixIcon: Icons.lock_outline,
+              label: 'Yeni Şifre',
               obscureText: true,
             ),
             const SizedBox(height: 16),
             CustomTextField(
               controller: _confirmPasswordController,
-              labelText: 'Yeni Şifre (Tekrar)',
-              prefixIcon: Icons.lock_outline,
+              label: 'Yeni Şifre (Tekrar)',
               obscureText: true,
             ),
             const SizedBox(height: 24),

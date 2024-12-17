@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../constants/app_constants.dart';
 import '../models/task_model.dart';
 import '../screens/task_detail_screen.dart';
-import '../services/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TaskCard extends StatelessWidget {
@@ -148,12 +147,34 @@ class TaskCard extends StatelessWidget {
                       Text(
                         '${task.dueDate.day}/${task.dueDate.month}/${task.dueDate.year}',
                         style: TextStyle(
-                          color: task.dueDate.isBefore(DateTime.now())
-                              ? Colors.red
-                              : Colors.grey,
+                          color: task.isOverdue ? Colors.red : Colors.grey,
                           fontSize: 14,
                         ),
                       ),
+                      if (task.progress > 0) ...[
+                        const SizedBox(width: 16),
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            value: task.progress / 100,
+                            strokeWidth: 2,
+                            backgroundColor: Colors.grey[300],
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              task.isCompleted ? Colors.green : Colors.blue,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '%${task.progress.toInt()}',
+                          style: TextStyle(
+                            color: task.isCompleted ? Colors.green : Colors.blue,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ],

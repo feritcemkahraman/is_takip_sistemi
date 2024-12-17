@@ -1,29 +1,40 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../services/auth_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
+import '../services/user_service.dart';
 
 class UserSelectorWidget extends StatefulWidget {
-  final String? selectedUserId;
   final Function(String) onUserSelected;
   final String? excludeUserId;
-  final String? department;
+  final String? selectedUserId;
 
   const UserSelectorWidget({
-    super.key,
-    this.selectedUserId,
+    Key? key,
     required this.onUserSelected,
     this.excludeUserId,
-    this.department,
-  });
+    this.selectedUserId,
+  }) : super(key: key);
 
   @override
-  State<UserSelectorWidget> createState() => _UserSelectorWidgetState();
+  _UserSelectorWidgetState createState() => _UserSelectorWidgetState();
 }
 
 class _UserSelectorWidgetState extends State<UserSelectorWidget> {
+  final UserService _userService = UserService(
+    firestore: FirebaseFirestore.instance,
+    auth: FirebaseAuth.instance,
+  );
+
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _isLoading = false;
+  List<UserModel> _users = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUsers();
+  }
 
   @override
   void dispose() {
@@ -31,82 +42,95 @@ class _UserSelectorWidgetState extends State<UserSelectorWidget> {
     super.dispose();
   }
 
+  Future<void> _loadUsers() async {
+    setState(() => _isLoading = true);
+    try {
+      final users = await _userService.getAllUsers();
+      setState(() {
+        _users = users;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Kullanıcılar yüklenirken hata: $e')),
+        );
+      }
+    }
+  }
+
+  List<UserModel> get _filteredUsers {
+    return _users.where((user) {
+      if (widget.excludeUserId != null &&
+          user.id == widget.excludeUserId) {
+        return false;
+      }
+
+      if (_searchQuery.isEmpty) {
+        return true;
+      }
+
+      return user.name.toLowerCase().contains(_searchQuery) ||
+          user.email.toLowerCase().contains(_searchQuery);
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context);
-
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: TextField(
-            controller: _searchController,
-            decoration: const InputDecoration(
-              labelText: 'Kullanıcı Ara',
-              prefixIcon: Icon(Icons.search),
-              border: OutlineInputBorder(),
-            ),
-            onChanged: (value) {
-              setState(() {
-                _searchQuery = value.toLowerCase();
-              });
-            },
+        TextField(
+          controller: _searchController,
+          decoration: const InputDecoration(
+            labelText: 'Kullanıcı Ara',
+            prefixIcon: Icon(Icons.search),
           ),
-        ),
-        FutureBuilder<List<UserModel>>(
-          future: widget.department != null
-              ? authService.getUsersByDepartment(widget.department!)
-              : authService.getAllUsers(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            if (snapshot.hasError) {
-              return Center(child: Text('Hata: ${snapshot.error}'));
-            }
-
-            final users = snapshot.data ?? [];
-            final filteredUsers = users.where((user) {
-              if (widget.excludeUserId != null &&
-                  user.id == widget.excludeUserId) {
-                return false;
-              }
-              if (_searchQuery.isEmpty) return true;
-              return user.name.toLowerCase().contains(_searchQuery) ||
-                  user.username.toLowerCase().contains(_searchQuery) ||
-                  user.department.toLowerCase().contains(_searchQuery);
-            }).toList();
-
-            if (filteredUsers.isEmpty) {
-              return const Center(child: Text('Kullanıcı bulunamadı'));
-            }
-
-            return ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: filteredUsers.length,
-              itemBuilder: (context, index) {
-                final user = filteredUsers[index];
-                final isSelected = user.id == widget.selectedUserId;
-
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor:
-                        isSelected ? Colors.blue : Colors.grey.shade200,
-                    child: Text(user.name[0].toUpperCase()),
-                  ),
-                  title: Text(user.name),
-                  subtitle: Text(user.department),
-                  trailing: isSelected
-                      ? const Icon(Icons.check_circle, color: Colors.blue)
-                      : null,
-                  onTap: () => widget.onUserSelected(user.id),
-                );
-              },
-            );
+          onChanged: (value) {
+            setState(() {
+              _searchQuery = value.toLowerCase();
+            });
           },
         ),
+        const SizedBox(height: 8),
+        if (_isLoading)
+          const Center(child: CircularProgressIndicator())
+        else if (_filteredUsers.isEmpty)
+          const Center(
+            child: Text(
+              'Kullanıcı bulunamadı',
+              style: TextStyle(
+                color: Colors.grey,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _filteredUsers.length,
+            itemBuilder: (context, index) {
+              final user = _filteredUsers[index];
+              final isSelected = user.id == widget.selectedUserId;
+
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: isSelected ? Colors.blue : Colors.grey[200],
+                  child: Text(
+                    user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.black,
+                    ),
+                  ),
+                ),
+                title: Text(user.name),
+                subtitle: Text(user.email),
+                onTap: () => widget.onUserSelected(user.id),
+                selected: isSelected,
+              );
+            },
+          ),
       ],
     );
   }

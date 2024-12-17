@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
+import '../models/user_model.dart';
 import '../widgets/custom_text_field.dart';
-import 'register_screen.dart';
-import 'home_screen.dart';
+import '../widgets/custom_button.dart';
+import '../constants/app_constants.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -28,39 +29,63 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      await authService.signInWithUsername(
+      print('Giriş denemesi başlatılıyor...');
+      print('Kullanıcı adı: ${_usernameController.text.trim()}');
+      
+      final user = await authService.signInWithUsername(
         _usernameController.text.trim(),
-        _passwordController.text,
+        _passwordController.text.trim(),
       );
 
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const HomeScreen(),
+      print('Giriş başarılı: ${user.name}, Rol: ${user.role}');
+
+      if (!mounted) return;
+      
+      // Başarılı giriş bildirimi
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Hoş geldiniz, ${user.name}!'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      // Kullanıcı rolüne göre yönlendirme
+      if (user.role == 'admin') {
+        Navigator.pushReplacementNamed(context, '/admin_dashboard');
+      } else {
+        // TODO: Çalışan dashboard'u daha sonra eklenecek
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Çalışan paneli henüz hazır değil.'),
+            duration: Duration(seconds: 2),
           ),
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Giriş hatası: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      print('Giriş hatası: $e');
+      if (!mounted) return;
+      
+      String errorMessage = e.toString();
+      if (errorMessage.contains('Kullanıcı bulunamadı')) {
+        errorMessage = 'Kullanıcı adı veya şifre hatalı';
+      } else if (errorMessage.contains('Yanlış şifre')) {
+        errorMessage = 'Kullanıcı adı veya şifre hatalı';
       }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMessage.replaceAll('Exception: ', '')),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -70,32 +95,33 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(16),
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Icon(
-                  Icons.business,
-                  size: 100,
-                  color: Colors.blue,
-                ),
-                const SizedBox(height: 32),
                 const Text(
-                  'İş Takip Sistemi',
+                  'HAN Holding',
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
+                ),
+                const Text(
+                  'İş Takip Sistemi',
                   textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 32),
                 CustomTextField(
                   controller: _usernameController,
                   labelText: 'Kullanıcı Adı',
-                  prefixIcon: Icons.person,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Kullanıcı adı gerekli';
@@ -107,45 +133,30 @@ class _LoginScreenState extends State<LoginScreen> {
                 CustomTextField(
                   controller: _passwordController,
                   labelText: 'Şifre',
-                  prefixIcon: Icons.lock,
                   obscureText: true,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Şifre gerekli';
                     }
+                    if (value.length < 6) {
+                      return 'Şifre en az 6 karakter olmalı';
+                    }
                     return null;
                   },
                 ),
                 const SizedBox(height: 24),
-                ElevatedButton(
+                CustomButton(
+                  text: 'Giriş Yap',
                   onPressed: _isLoading ? null : _login,
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Text('Giriş Yap'),
+                  isLoading: _isLoading,
+                  isFullWidth: true,
                 ),
                 const SizedBox(height: 16),
                 TextButton(
                   onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const RegisterScreen(),
-                      ),
-                    );
+                    Navigator.pushNamed(context, '/register');
                   },
                   child: const Text('Hesabınız yok mu? Kayıt olun'),
-                ),
-                TextButton(
-                  onPressed: () {
-                    // TODO: Şifremi unuttum ekranına yönlendir
-                  },
-                  child: const Text('Şifremi Unuttum'),
                 ),
               ],
             ),

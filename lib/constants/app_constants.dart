@@ -6,8 +6,11 @@ class AppConstants {
   static const String titleRegister = 'Kayıt Ol';
 
   // Collections
-  static const String usersCollection = 'han_users';
+  static const String usersCollection = 'users';
   static const String tasksCollection = 'tasks';
+  static const String reportsCollection = 'reports';
+  static const String commentsCollection = 'comments';
+  static const String projectsCollection = 'projects';
 
   // Labels
   static const String labelName = 'Ad Soyad';
@@ -22,6 +25,11 @@ class AppConstants {
   static const String labelStatus = 'Durum';
   static const String labelDueDate = 'Bitiş Tarihi';
   static const String labelAssignedTo = 'Atanan Kişi';
+  static const String labelPriority = 'Öncelik';
+  static const String labelProgress = 'İlerleme';
+  static const String labelTags = 'Etiketler';
+  static const String labelAttachments = 'Ekler';
+  static const String labelComments = 'Yorumlar';
 
   // Buttons
   static const String buttonLogin = 'Giriş Yap';
@@ -30,6 +38,15 @@ class AppConstants {
   static const String buttonUpdate = 'Güncelle';
   static const String buttonDelete = 'Sil';
   static const String buttonCancel = 'İptal';
+  static const String buttonClose = 'Kapat';
+  static const String buttonAdd = 'Ekle';
+  static const String buttonRemove = 'Kaldır';
+  static const String buttonSearch = 'Ara';
+  static const String buttonFilter = 'Filtrele';
+  static const String buttonClear = 'Temizle';
+  static const String buttonNext = 'İleri';
+  static const String buttonBack = 'Geri';
+  static const String buttonFinish = 'Bitir';
 
   // Error Messages
   static const String errorRequiredField = 'Bu alan zorunludur';
@@ -42,16 +59,31 @@ class AppConstants {
   static const String errorEmailAlreadyInUse = 'Bu e-posta adresi zaten kullanımda';
   static const String errorWeakPassword = 'Şifre çok zayıf';
   static const String errorUsernameAlreadyInUse = 'Bu kullanıcı adı zaten kullanımda';
+  static const String errorRequired = 'Bu alan zorunludur';
+  static const String errorInvalidPassword = 'Geçersiz şifre';
+  static const String errorPasswordMismatch = 'Şifreler eşleşmiyor';
+  static const String errorInvalidDate = 'Geçersiz tarih';
+  static const String errorInvalidNumber = 'Geçersiz sayı';
+  static const String errorInvalidPhone = 'Geçersiz telefon numarası';
+  static const String errorUnexpected = 'Beklenmeyen bir hata oluştu';
+  static const String errorNoInternet = 'İnternet bağlantısı yok';
+  static const String errorTimeout = 'İstek zaman aşımına uğradı';
+  static const String errorServer = 'Sunucu hatası';
+  static const String errorPermission = 'Yetkiniz yok';
+  static const String errorNotFound = 'Bulunamadı';
+  static const String errorAlreadyExists = 'Zaten mevcut';
 
   // Roles
   static const String roleAdmin = 'admin';
   static const String roleManager = 'manager';
+  static const String roleEmployee = 'employee';
   static const String roleUser = 'user';
 
   // Role Names
   static const Map<String, String> roleNames = {
     roleAdmin: 'Yönetici',
     roleManager: 'Müdür',
+    roleEmployee: 'Çalışan',
     roleUser: 'Kullanıcı',
   };
 
@@ -59,113 +91,120 @@ class AppConstants {
   static const List<String> roles = [
     roleAdmin,
     roleManager,
+    roleEmployee,
     roleUser,
   ];
 
   // Departments
   static const List<String> departments = [
-    'Satış / Pazarlama',
+    'Muhasebe',
     'Mühendislik Departmanı',
     'Teknik Ekip',
-    'Muhasebe',
-    'İnsan Kaynakları',
     'Yazılım / PR',
+    'İnsan Kaynakları',
+    'Satış / Pazarlama',
   ];
 
   // Task Status
-  static const String taskStatusPending = 'pending';
-  static const String taskStatusInProgress = 'in_progress';
-  static const String taskStatusCompleted = 'completed';
-  static const String taskStatusCancelled = 'cancelled';
+  static const String statusNew = 'new';
+  static const String statusInProgress = 'in_progress';
+  static const String statusCompleted = 'completed';
+  static const String statusCancelled = 'cancelled';
+  static const String statusOnHold = 'on_hold';
+  static const String statusDelayed = 'delayed';
+  static const String statusPending = 'pending';
 
-  static const Map<String, String> taskStatusNames = {
-    taskStatusPending: 'Beklemede',
-    taskStatusInProgress: 'Devam Ediyor',
-    taskStatusCompleted: 'Tamamlandı',
-    taskStatusCancelled: 'İptal Edildi',
+  static const Map<String, String> taskStatusLabels = {
+    statusNew: 'Yeni',
+    statusInProgress: 'Devam Ediyor',
+    statusCompleted: 'Tamamlandı',
+    statusCancelled: 'İptal Edildi',
+    statusOnHold: 'Askıda',
+    statusDelayed: 'Gecikmiş',
+    statusPending: 'Beklemede',
   };
 
-  static const Map<String, Color> taskStatusColors = {
-    taskStatusPending: Colors.orange,
-    taskStatusInProgress: Colors.blue,
-    taskStatusCompleted: Colors.green,
-    taskStatusCancelled: Colors.red,
+  static const Map<String, int> taskStatusColors = {
+    statusNew: 0xFF2196F3, // Blue
+    statusInProgress: 0xFFFFA726, // Orange
+    statusCompleted: 0xFF4CAF50, // Green
+    statusCancelled: 0xFFF44336, // Red
+    statusOnHold: 0xFF9E9E9E, // Grey
+    statusDelayed: 0xFFE91E63, // Pink
+    statusPending: 0xFFFF9800, // Orange
   };
 
   // Task Priority
-  static const String taskPriorityLow = 'low';
-  static const String taskPriorityNormal = 'normal';
-  static const String taskPriorityHigh = 'high';
-
-  static const Map<String, String> taskPriorityNames = {
-    taskPriorityLow: 'Düşük',
-    taskPriorityNormal: 'Normal',
-    taskPriorityHigh: 'Yüksek',
-  };
-
-  static const Map<String, Color> taskPriorityColors = {
-    taskPriorityLow: Colors.green,
-    taskPriorityNormal: Colors.blue,
-    taskPriorityHigh: Colors.red,
-  };
-
-  // Renk sabitleri
-  static const Color taskEventColor = Colors.blue;
-  static const Color meetingEventColor = Colors.green;
-  static const Color holidayEventColor = Colors.red;
-  static const Color taskEventOverdueColor = Colors.red;
-  static const Color taskEventCompletedColor = Colors.green;
-
-  // Task Priorities
-  static const String priorityHigh = 'high';
-  static const String priorityNormal = 'normal';
   static const String priorityLow = 'low';
+  static const String priorityMedium = 'medium';
+  static const String priorityHigh = 'high';
+  static const String priorityUrgent = 'urgent';
+  static const String priorityNormal = 'normal';
 
-  static const Map<String, String> priorityLabels = {
-    priorityHigh: 'Acil',
-    priorityNormal: 'Normal',
+  static const Map<String, String> taskPriorityLabels = {
     priorityLow: 'Düşük',
+    priorityMedium: 'Orta',
+    priorityHigh: 'Yüksek',
+    priorityUrgent: 'Acil',
+    priorityNormal: 'Normal',
   };
 
-  static const Map<String, Color> priorityColors = {
-    priorityHigh: Colors.red,
-    priorityNormal: Colors.orange,
-    priorityLow: Colors.green,
+  static const Map<String, int> taskPriorityColors = {
+    priorityLow: 0xFF4CAF50, // Green
+    priorityMedium: 0xFFFFA726, // Orange
+    priorityHigh: 0xFFF44336, // Red
+    priorityUrgent: 0xFF9C27B0, // Purple
+    priorityNormal: 0xFF2196F3, // Blue
   };
 
-  // Task Statuses
-  static const String statusPending = 'pending';
-  static const String statusInProgress = 'in_progress';
-  static const String statusCompleted = 'completed';
-  static const String statusDelayed = 'delayed';
-  static const String statusCancelled = 'cancelled';
+  // Report Types
+  static const String reportTypeTask = 'task';
+  static const String reportTypeDepartment = 'department';
+  static const String reportTypeUser = 'user';
 
-  static const Map<String, String> statusLabels = {
-    statusPending: 'Beklemede',
-    statusInProgress: 'Devam Ediyor',
-    statusCompleted: 'Tamamlandı',
-    statusDelayed: 'Gecikmiş',
-    statusCancelled: 'İptal Edildi',
+  static const Map<String, String> reportTypeLabels = {
+    reportTypeTask: 'Görev Raporu',
+    reportTypeDepartment: 'Departman Raporu',
+    reportTypeUser: 'Kullanıcı Raporu',
   };
 
-  static const Map<String, Color> statusColors = {
-    statusPending: Colors.orange,
-    statusInProgress: Colors.blue,
-    statusCompleted: Colors.green,
-    statusDelayed: Colors.red,
-    statusCancelled: Colors.grey,
+  // File Types
+  static const String fileTypeImage = 'image';
+  static const String fileTypeDocument = 'document';
+  static const String fileTypeSpreadsheet = 'spreadsheet';
+  static const String fileTypePresentation = 'presentation';
+  static const String fileTypePDF = 'pdf';
+  static const String fileTypeOther = 'other';
+
+  static const Map<String, String> fileTypeLabels = {
+    fileTypeImage: 'Resim',
+    fileTypeDocument: 'Belge',
+    fileTypeSpreadsheet: 'Hesap Tablosu',
+    fileTypePresentation: 'Sunum',
+    fileTypePDF: 'PDF',
+    fileTypeOther: 'Diğer',
   };
 
-  // Task Recurrence Types
-  static const String recurrenceDaily = 'daily';
-  static const String recurrenceWeekly = 'weekly';
-  static const String recurrenceMonthly = 'monthly';
+  // Date Formats
+  static const String dateFormatFull = 'dd/MM/yyyy HH:mm';
+  static const String dateFormatShort = 'dd/MM/yyyy';
+  static const String dateFormatTime = 'HH:mm';
 
-  static const Map<String, String> recurrenceLabels = {
-    recurrenceDaily: 'Günlük',
-    recurrenceWeekly: 'Haftalık',
-    recurrenceMonthly: 'Aylık',
-  };
+  // Pagination
+  static const int defaultPageSize = 20;
+  static const int maxPageSize = 100;
+
+  // Search
+  static const int minSearchLength = 3;
+  static const int maxSearchLength = 50;
+
+  // File Upload
+  static const int maxFileSize = 10 * 1024 * 1024; // 10MB
+  static const List<String> allowedFileTypes = [
+    'jpg', 'jpeg', 'png', 'gif',
+    'doc', 'docx', 'xls', 'xlsx',
+    'ppt', 'pptx', 'pdf', 'txt',
+  ];
 
   // Success Messages
   static const String successTaskCreated = 'Görev başarıyla oluşturuldu';
@@ -184,7 +223,7 @@ class AppConstants {
     defaultValue: '',
   );
 
-  // Takvim ayarları
+  // Calendar Settings
   static const List<String> calendarViews = [
     'month',
     'week',
@@ -214,4 +253,11 @@ class AppConstants {
     '4 Saat',
     'Tüm Gün',
   ];
+
+  // Colors
+  static const Color taskEventColor = Colors.blue;
+  static const Color meetingEventColor = Colors.green;
+  static const Color holidayEventColor = Colors.red;
+  static const Color taskEventOverdueColor = Colors.red;
+  static const Color taskEventCompletedColor = Colors.green;
 }

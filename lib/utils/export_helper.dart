@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import '../services/storage_service.dart';
 import 'file_helper.dart';
 import 'export_result.dart';
 
@@ -8,39 +10,21 @@ class ExportHelper {
   // Dosyayı paylaş
   static Future<ExportResult> shareFile(
     File file, {
-    String? subject,
-    String? text,
+    String subject = '',
+    String text = '',
     Function(double)? onProgress,
   }) async {
-    int retryCount = 0;
     ExportResult? result;
+    var retryCount = 0;
 
     do {
       try {
-        // Dosya kontrolü
-        if (!await FileHelper.checkFilePermissions(file)) {
-          return ExportResult(
-            isSuccess: false,
-            message: 'Dosya erişim izni yok',
-          );
-        }
-
-        if (!await FileHelper.checkFileSize(file)) {
-          return ExportResult(
-            isSuccess: false,
-            message: 'Dosya boyutu çok büyük',
-          );
-        }
-
-        if (!FileHelper.isValidMimeType(file.path)) {
-          return ExportResult(
-            isSuccess: false,
-            message: 'Geçersiz dosya türü',
-          );
-        }
-
         // Büyük dosyalar için parçalı transfer
         final tempFile = await FileHelper.createTempFile('temp', file.path.split('.').last);
+        if (tempFile == null) {
+          throw Exception('Geçici dosya oluşturulamadı');
+        }
+
         final success = await FileHelper.chunkedTransfer(
           file,
           tempFile,
@@ -52,17 +36,21 @@ class ExportHelper {
         }
 
         // Dosyayı paylaş
-        await Share.shareXFiles(
+        final shareResult = await Share.shareXFiles(
           [XFile(tempFile.path)],
           subject: subject,
           text: text,
         );
 
-        result = ExportResult(
-          isSuccess: true,
-          filePath: tempFile.path,
-          message: 'Dosya başarıyla paylaşıldı',
-        );
+        if (shareResult.status == ShareResultStatus.success) {
+          result = ExportResult(
+            isSuccess: true,
+            filePath: tempFile.path,
+            message: 'Dosya başarıyla paylaşıldı',
+          );
+        } else {
+          throw Exception('Dosya paylaşma iptal edildi');
+        }
       } catch (e) {
         retryCount++;
         if (retryCount < 3) {
@@ -119,16 +107,16 @@ class ExportHelper {
     );
   }
 
-  // Hata mesajı
-  static void showErrorDialog(BuildContext context, String message) {
-    showDialog(
+  // Hata dialog'unu göster
+  static Future<void> showErrorDialog(BuildContext context, String message) {
+    return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Hata'),
         content: Text(message),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(context).pop(),
             child: const Text('Tamam'),
           ),
         ],

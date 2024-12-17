@@ -12,16 +12,6 @@
 9. [Güvenlik](#güvenlik)
 10. [Hata Ayıklama](#hata-ayıklama)
 
-## Genel Bakış
-
-İş Takip Sistemi, kuruluşların iş süreçlerini etkili bir şekilde yönetmelerini sağlayan kapsamlı bir platformdur. Sistem, iş akışı yönetimi, toplantı organizasyonu, görev takibi ve raporlama gibi temel özellikleri içerir.
-
-### Temel Bileşenler
-- İş Akışı Motoru
-- Toplantı Yönetim Sistemi
-- Bildirim Merkezi
-- Raporlama Modülü
-- Kullanıcı Yönetimi
 
 ## Kurulum
 
@@ -51,6 +41,18 @@ flutterfire configure
 ```bash
 flutter run
 ```
+
+## Genel Bakış
+
+İş Takip Sistemi, kuruluşların iş süreçlerini etkili bir şekilde yönetmelerini sağlayan kapsamlı bir platformdur. Sistem, iş akışı yönetimi, toplantı organizasyonu, görev takibi ve raporlama gibi temel özellikleri içerir.
+
+### Temel Bileşenler
+- İş Akışı Motoru
+- Toplantı Yönetim Sistemi
+- Bildirim Merkezi
+- Raporlama Modülü
+- Kullanıcı Yönetimi
+
 
 ## Kullanıcı Rolleri
 
@@ -160,43 +162,14 @@ flutter run
 - Excel/PDF dışa aktarma
 - Otomatik rapor gönderimi
 
-## Güvenlik
 
-### Güvenlik Önlemleri
-1. Kimlik Doğrulama
-   - E-posta/şifre ile giriş
-   - İki faktörlü doğrulama
-   - Oturum yönetimi
 
 2. Yetkilendirme
    - Rol tabanlı erişim kontrolü
    - Özel izinler
    - Veri erişim kısıtlamaları
 
-3. Veri Güvenliği
-   - Şifrelenmiş depolama
-   - Güvenli iletişim (HTTPS)
-   - Veri yedekleme
 
-## Hata Ayıklama
-
-### Loglama Sistemi
-1. Log Seviyeleri
-   - DEBUG: Geliştirme detayları
-   - INFO: Sistem bilgileri
-   - WARNING: Potansiyel sorunlar
-   - ERROR: Hatalar
-   - CRITICAL: Kritik hatalar
-
-2. Log Yönetimi
-   - Merkezi loglama
-   - Log rotasyonu
-   - Log analizi
-
-### Hata İzleme
-- Hata raporlama
-- Performans izleme
-- Kullanım istatistikleri
 
 ## En İyi Uygulamalar
 
@@ -222,40 +195,10 @@ flutter run
    - Batch işlemler
    - Verimli sorgular
 
-### Kod Kalitesi
-1. Kod Standartları
-   - Temiz kod prensipleri
-   - Dokümantasyon
-   - Kod gözden geçirme
 
-2. Test Stratejisi
-   - Birim testler
-   - Entegrasyon testleri
-   - UI testleri
 
-## Sürüm Geçmişi
 
-### v1.0.0 (2024-01-15)
-- İlk sürüm
-- Temel özellikler
-- Kullanıcı yönetimi
 
-### v1.1.0 (2024-01-30)
-- İş akışı iyileştirmeleri
-- Performans optimizasyonları
-- Hata düzeltmeleri
-
-## Destek
-
-### İletişim
-- E-posta: support@istakip.com
-- Telefon: +90 xxx xxx xx xx
-- Web: www.istakip.com/destek
-
-### Yardım Kaynakları
-- SSS
-- Video eğitimler
-- Kullanım kılavuzları 
 
 ## Örnek Kullanım Senaryoları
 

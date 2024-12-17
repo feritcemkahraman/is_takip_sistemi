@@ -1,83 +1,94 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 
 class UserService {
   final FirebaseFirestore _firestore;
-  final FirebaseAuth _auth;
 
-  UserService({
-    FirebaseFirestore? firestore,
-    FirebaseAuth? auth,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+  UserService({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  // Mevcut kullanıcıyı getir
-  Future<User?> getCurrentUser() async {
-    return _auth.currentUser;
-  }
-
-  // Kullanıcı bilgilerini getir
-  Future<UserModel?> getUser(String userId) async {
+  Future<UserModel> getUserById(String userId) async {
     try {
       final doc = await _firestore.collection('users').doc(userId).get();
-      if (!doc.exists) return null;
-      return UserModel.fromMap(doc.data()!);
+      if (!doc.exists) {
+        throw Exception('Kullanıcı bulunamadı');
+      }
+      return UserModel.fromMap(doc.data()!..['id'] = doc.id);
     } catch (e) {
-      print('Error getting user: $e');
-      return null;
+      throw Exception('Kullanıcı bilgileri alınamadı: $e');
     }
   }
 
-  // Tüm kullanıcıları getir
-  Stream<List<UserModel>> getAllUsers() {
-    return _firestore
-        .collection('users')
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => UserModel.fromMap(doc.data()))
-            .toList());
-  }
-
-  // Kullanıcı bilgilerini güncelle
-  Future<void> updateUser(UserModel user) async {
+  Future<List<UserModel>> getAllUsers() async {
     try {
-      await _firestore.collection('users').doc(user.id).update(user.toMap());
+      final snapshot = await _firestore.collection('users').get();
+      return snapshot.docs
+          .map((doc) => UserModel.fromMap(doc.data()..['id'] = doc.id))
+          .toList();
     } catch (e) {
-      print('Error updating user: $e');
-      rethrow;
+      throw Exception('Kullanıcı listesi alınamadı: $e');
     }
   }
 
-  // Kullanıcı sil
+  Future<List<UserModel>> searchUsers(String query) async {
+    try {
+      final snapshot = await _firestore
+          .collection('users')
+          .where('name', isGreaterThanOrEqualTo: query)
+          .where('name', isLessThan: query + 'z')
+          .get();
+
+      return snapshot.docs
+          .map((doc) => UserModel.fromMap(doc.data()..['id'] = doc.id))
+          .toList();
+    } catch (e) {
+      throw Exception('Kullanıcı araması yapılamadı: $e');
+    }
+  }
+
+  Future<void> updateUser(String userId, Map<String, dynamic> data) async {
+    try {
+      await _firestore.collection('users').doc(userId).update(data);
+    } catch (e) {
+      throw Exception('Kullanıcı güncellenemedi: $e');
+    }
+  }
+
+  Future<void> updateUserAvatar(String userId, String avatarUrl) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'avatar': avatarUrl,
+      });
+    } catch (e) {
+      throw Exception('Profil resmi güncellenemedi: $e');
+    }
+  }
+
+  Future<void> updateUserRole(String userId, String role) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'role': role,
+      });
+    } catch (e) {
+      throw Exception('Kullanıcı rolü güncellenemedi: $e');
+    }
+  }
+
+  Future<void> updateUserDepartment(String userId, String departmentId) async {
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'departmentId': departmentId,
+      });
+    } catch (e) {
+      throw Exception('Kullanıcı departmanı güncellenemedi: $e');
+    }
+  }
+
   Future<void> deleteUser(String userId) async {
     try {
       await _firestore.collection('users').doc(userId).delete();
     } catch (e) {
-      print('Error deleting user: $e');
-      rethrow;
+      throw Exception('Kullanıcı silinemedi: $e');
     }
-  }
-
-  // Role göre kullanıcıları getir
-  Stream<List<UserModel>> getUsersByRole(String role) {
-    return _firestore
-        .collection('users')
-        .where('role', isEqualTo: role)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => UserModel.fromMap(doc.data()))
-            .toList());
-  }
-
-  // Departmana göre kullanıcıları getir
-  Stream<List<UserModel>> getUsersByDepartment(String department) {
-    return _firestore
-        .collection('users')
-        .where('department', isEqualTo: department)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => UserModel.fromMap(doc.data()))
-            .toList());
   }
 }

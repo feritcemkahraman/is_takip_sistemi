@@ -1,75 +1,310 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/notification_model.dart';
-import '../models/task_model.dart';
-import '../models/meeting_model.dart';
-import '../models/workflow_model.dart';
+import '../models/notification_settings.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class NotificationService {
-  final FirebaseFirestore _firestore;
-  final String _collection = 'notifications';
+  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static const String senderId = '795393167329';
+  static const String _fcmUrl = 'https://fcm.googleapis.com/fcm/send';
+  static const String _serverKey = 'YOUR_SERVER_KEY'; // Firebase Console'dan alınan Server Key
 
-  NotificationService({required FirebaseFirestore firestore})
-      : _firestore = firestore;
+  // Bildirime tıklandığında çağrılacak callback
+  Function(String chatId)? onNotificationTap;
 
-  // Bildirim oluşturma
-  Future<void> createNotification(NotificationModel notification) async {
-    try {
-      await _firestore.collection(_collection).add(notification.toMap());
-    } catch (e) {
-      print('Bildirim oluşturma hatası: $e');
-      rethrow;
+  Future<void> initialize() async {
+    // FCM izinlerini al
+    await _fcm.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // FCM token'ı al
+    final token = await _fcm.getToken(
+      vapidKey: senderId,
+    );
+    print('FCM Token: $token');
+
+    // Ön planda bildirim gösterme
+    await _fcm.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // Arka planda bildirim dinleme
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    // Ön planda bildirim dinleme
+    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+
+    // Bildirime tıklama
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationOpen);
+  }
+
+  Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    print('Ön planda mesaj alındı: ${message.data}');
+
+    // Bildirim ayarlarını kontrol et
+    if (message.data['chatId'] != null && message.data['userId'] != null) {
+      final settings = await _getChatNotificationSettings(
+        message.data['chatId'],
+        message.data['userId'],
+      );
+
+      // Sohbet sessize alınmışsa bildirim gösterme
+      if (settings.isMuted) return;
     }
   }
 
-  // Bildirim silme
-  Future<void> deleteNotification(String notificationId) async {
+  Future<ChatNotificationSettings> _getChatNotificationSettings(
+    String chatId,
+    String userId,
+  ) async {
     try {
-      await _firestore.collection(_collection).doc(notificationId).delete();
-    } catch (e) {
-      print('Bildirim silme hatası: $e');
-      rethrow;
-    }
-  }
-
-  // Tüm bildirimleri silme
-  Future<void> deleteAllNotifications(String userId) async {
-    try {
-      final batch = _firestore.batch();
-      final notifications = await _firestore
-          .collection(_collection)
-          .where('userId', isEqualTo: userId)
+      final doc = await _firestore
+          .collection('chats')
+          .doc(chatId)
+          .collection('notification_settings')
+          .doc(userId)
           .get();
 
-      for (var doc in notifications.docs) {
-        batch.delete(doc.reference);
+      if (!doc.exists) {
+        return ChatNotificationSettings(isMuted: false);
       }
 
-      await batch.commit();
+      return ChatNotificationSettings.fromMap(doc.data()!);
     } catch (e) {
-      print('Tüm bildirimleri silme hatası: $e');
+      print('Bildirim ayarları alınamadı: $e');
+      return ChatNotificationSettings(isMuted: false);
+    }
+  }
+
+  Future<void> _handleNotificationOpen(RemoteMessage message) async {
+    print('Bildirim açıldı: ${message.data}');
+    final chatId = message.data['chatId'];
+    if (chatId != null && onNotificationTap != null) {
+      onNotificationTap!(chatId);
+    }
+  }
+
+  // Token'ı güncelle
+  Future<void> updateToken(String userId) async {
+    final token = await _fcm.getToken();
+    if (token != null) {
+      await _firestore.collection('users').doc(userId).update({
+        'fcmToken': token,
+        'lastTokenUpdate': FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  // Bildirim ayarlarını getir
+  Future<ChatNotificationSettings> getNotificationSettings(
+    String chatId,
+    String userId,
+  ) async {
+    try {
+      final doc = await _firestore
+          .collection('chats')
+          .doc(chatId)
+          .collection('notification_settings')
+          .doc(userId)
+          .get();
+
+      if (!doc.exists) {
+        return ChatNotificationSettings(isMuted: false);
+      }
+
+      return ChatNotificationSettings.fromMap(doc.data()!);
+    } catch (e) {
+      print('Bildirim ayarları alınamadı: $e');
+      return ChatNotificationSettings(isMuted: false);
+    }
+  }
+
+  // Belirli bir konuya abone ol
+  Future<void> subscribeToTopic(String topic) async {
+    await _fcm.subscribeToTopic(topic);
+  }
+
+  // Belirli bir konudan çık
+  Future<void> unsubscribeFromTopic(String topic) async {
+    await _fcm.unsubscribeFromTopic(topic);
+  }
+
+  Future<void> _sendFcmMessage({
+    required String token,
+    required String title,
+    required String body,
+    required Map<String, dynamic> data,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse(_fcmUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'key=$_serverKey',
+        },
+        body: jsonEncode({
+          'to': token,
+          'notification': {
+            'title': title,
+            'body': body,
+          },
+          'data': data,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('FCM isteği başarısız: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('FCM mesajı gönderilemedi: $e');
       rethrow;
+    }
+  }
+
+  // Görev tamamlandığında bildirim gönder
+  Future<void> sendTaskCompletionNotification({
+    required String taskId,
+    required String taskTitle,
+    required String completedBy,
+    required String assignedTo,
+  }) async {
+    try {
+      final notification = {
+        'type': 'task_completed',
+        'taskId': taskId,
+        'title': 'Görev Tamamlandı',
+        'message': '$completedBy, "$taskTitle" görevini tamamladı',
+        'timestamp': FieldValue.serverTimestamp(),
+        'userId': assignedTo,
+        'isRead': false,
+      };
+
+      await _firestore.collection('notifications').add(notification);
+      
+      final userDoc = await _firestore.collection('users').doc(assignedTo).get();
+      final fcmToken = userDoc.data()?['fcmToken'];
+      
+      if (fcmToken != null) {
+        await _sendFcmMessage(
+          token: fcmToken,
+          title: 'Görev Tamamlandı',
+          body: '$completedBy, "$taskTitle" görevini tamamladı',
+          data: {
+            'type': 'task_completed',
+            'taskId': taskId,
+          },
+        );
+      }
+    } catch (e) {
+      print('Bildirim gönderilemedi: $e');
+    }
+  }
+
+  // Görev atandığında bildirim gönder
+  Future<void> sendTaskAssignmentNotification({
+    required String taskId,
+    required String taskTitle,
+    required String assignedBy,
+    required String assignedTo,
+  }) async {
+    try {
+      final notification = {
+        'type': 'task_assigned',
+        'taskId': taskId,
+        'title': 'Yeni Görev Atandı',
+        'message': '$assignedBy size "$taskTitle" görevini atadı',
+        'timestamp': FieldValue.serverTimestamp(),
+        'userId': assignedTo,
+        'isRead': false,
+      };
+
+      await _firestore.collection('notifications').add(notification);
+      
+      final userDoc = await _firestore.collection('users').doc(assignedTo).get();
+      final fcmToken = userDoc.data()?['fcmToken'];
+      
+      if (fcmToken != null) {
+        await _sendFcmMessage(
+          token: fcmToken,
+          title: 'Yeni Görev Atandı',
+          body: '$assignedBy size "$taskTitle" görevini atadı',
+          data: {
+            'type': 'task_assigned',
+            'taskId': taskId,
+          },
+        );
+      }
+    } catch (e) {
+      print('Görev atama bildirimi gönderilemedi: $e');
+    }
+  }
+
+  // Görev yeniden atandığında bildirim gönder
+  Future<void> sendTaskReassignmentNotification({
+    required String taskId,
+    required String taskTitle,
+    required String assignedBy,
+    required String newAssignee,
+    required String assignedTo,
+  }) async {
+    try {
+      final notification = {
+        'type': 'task_reassigned',
+        'taskId': taskId,
+        'title': 'Görev Yeniden Atandı',
+        'message': '$assignedBy, "$taskTitle" görevini ${newAssignee}\'e yeniden atadı',
+        'timestamp': FieldValue.serverTimestamp(),
+        'userId': assignedTo,
+        'isRead': false,
+      };
+
+      await _firestore.collection('notifications').add(notification);
+      
+      final userDoc = await _firestore.collection('users').doc(assignedTo).get();
+      final fcmToken = userDoc.data()?['fcmToken'];
+      
+      if (fcmToken != null) {
+        await _sendFcmMessage(
+          token: fcmToken,
+          title: 'Görev Yeniden Atandı',
+          body: '$assignedBy, "$taskTitle" görevini ${newAssignee}\'e yeniden atadı',
+          data: {
+            'type': 'task_reassigned',
+            'taskId': taskId,
+          },
+        );
+      }
+    } catch (e) {
+      print('Görev yeniden atama bildirimi gönderilemedi: $e');
     }
   }
 
   // Bildirimi okundu olarak işaretle
-  Future<void> markAsRead(String notificationId) async {
+  Future<void> markNotificationAsRead(String notificationId) async {
     try {
       await _firestore
-          .collection(_collection)
+          .collection('notifications')
           .doc(notificationId)
           .update({'isRead': true});
     } catch (e) {
-      print('Bildirim okundu işaretleme hatası: $e');
-      rethrow;
+      print('Bildirim okundu olarak işaretlenemedi: $e');
     }
   }
 
   // Tüm bildirimleri okundu olarak işaretle
-  Future<void> markAllAsRead(String userId) async {
+  Future<void> markAllNotificationsAsRead(String userId) async {
     try {
       final batch = _firestore.batch();
       final notifications = await _firestore
-          .collection(_collection)
+          .collection('notifications')
           .where('userId', isEqualTo: userId)
           .where('isRead', isEqualTo: false)
           .get();
@@ -80,179 +315,49 @@ class NotificationService {
 
       await batch.commit();
     } catch (e) {
-      print('Tüm bildirimleri okundu işaretleme hatası: $e');
-      rethrow;
+      print('Bildirimler okundu olarak işaretlenemedi: $e');
     }
   }
 
-  // Kullanıcının bildirimlerini getir
-  Stream<List<NotificationModel>> getNotifications(String userId) {
-    try {
-      return _firestore
-          .collection(_collection)
-          .where('userId', isEqualTo: userId)
-          .orderBy('createdAt', descending: true)
-          .snapshots()
-          .map((snapshot) => snapshot.docs
-              .map((doc) => NotificationModel.fromFirestore(doc))
-              .toList());
-    } catch (e) {
-      print('Bildirimleri getirme hatası: $e');
-      rethrow;
-    }
+  // Bildirimleri getir (geliştirilmiş sıralama ve filtreleme)
+  Stream<List<Map<String, dynamic>>> getNotifications(String userId) {
+    return _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .orderBy('timestamp', descending: true)
+        .limit(50) // Son 50 bildirimi getir
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => {
+                  ...doc.data(),
+                  'id': doc.id,
+                  'formattedTimestamp': _formatTimestamp(doc.data()['timestamp'] as Timestamp),
+                })
+            .toList());
   }
 
-  // Okunmamış bildirim sayısını getir
-  Stream<int> getUnreadCount(String userId) {
-    try {
-      return _firestore
-          .collection(_collection)
-          .where('userId', isEqualTo: userId)
-          .where('isRead', isEqualTo: false)
-          .snapshots()
-          .map((snapshot) => snapshot.docs.length);
-    } catch (e) {
-      print('Okunmamış bildirim sayısı getirme hatası: $e');
-      rethrow;
+  // Zaman damgasını formatla
+  String _formatTimestamp(Timestamp timestamp) {
+    final now = DateTime.now();
+    final date = timestamp.toDate();
+    final difference = now.difference(date);
+
+    if (difference.inMinutes < 1) {
+      return 'Şimdi';
+    } else if (difference.inHours < 1) {
+      return '${difference.inMinutes} dakika önce';
+    } else if (difference.inDays < 1) {
+      return '${difference.inHours} saat önce';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} gün önce';
+    } else {
+      return '${date.day}/${date.month}/${date.year}';
     }
-  }
-
-  // Görev bildirimi gönder
-  Future<void> sendTaskNotification(TaskModel task, String action) async {
-    try {
-      final notification = NotificationModel(
-        id: '',
-        userId: task.assignedTo,
-        title: 'Görev: ${task.title}',
-        body: _getTaskNotificationBody(task, action),
-        type: NotificationModel.typeTask,
-        data: {'taskId': task.id},
-        createdAt: DateTime.now(),
-      );
-
-      await createNotification(notification);
-    } catch (e) {
-      print('Görev bildirimi gönderme hatası: $e');
-      rethrow;
-    }
-  }
-
-  // Toplantı bildirimi gönder
-  Future<void> sendMeetingNotification(
-      MeetingModel meeting, String action) async {
-    try {
-      final notification = NotificationModel(
-        id: '',
-        userId: meeting.organizerId,
-        title: 'Toplantı: ${meeting.title}',
-        body: _getMeetingNotificationBody(meeting, action),
-        type: NotificationModel.typeMeeting,
-        data: {'meetingId': meeting.id},
-        createdAt: DateTime.now(),
-      );
-
-      await createNotification(notification);
-    } catch (e) {
-      print('Toplantı bildirimi gönderme hatası: $e');
-      rethrow;
-    }
-  }
-
-  // İş akışı bildirimi gönder
-  Future<void> sendWorkflowNotification(
-      WorkflowModel workflow, String action) async {
-    try {
-      final notification = NotificationModel(
-        id: '',
-        userId: workflow.assignedTo,
-        title: 'İş Akışı: ${workflow.title}',
-        body: _getWorkflowNotificationBody(workflow, action),
-        type: NotificationModel.typeWorkflow,
-        data: {'workflowId': workflow.id},
-        createdAt: DateTime.now(),
-      );
-
-      await createNotification(notification);
-    } catch (e) {
-      print('İş akışı bildirimi gönderme hatası: $e');
-      rethrow;
-    }
-  }
-
-  // Bildirim izinlerini iste
-  Future<void> requestPermissions() async {
-    try {
-      // Platform'a göre bildirim izinlerini iste
-      // TODO: Platform spesifik izin istekleri eklenecek
-    } catch (e) {
-      print('Bildirim izni isteme hatası: $e');
-      rethrow;
-    }
-  }
-
-  // Bildirim servisini başlat
-  Future<void> initialize() async {
-    try {
-      // Bildirim servisini başlat
-      await requestPermissions();
-      // TODO: Platform spesifik başlatma işlemleri eklenecek
-    } catch (e) {
-      print('Bildirim servisi başlatma hatası: $e');
-      rethrow;
-    }
-  }
-
-  // Görev bildirimi metni
-  String _getTaskNotificationBody(TaskModel task, String action) {
-    switch (action) {
-      case 'created':
-        return 'Size yeni bir görev atandı';
-      case 'updated':
-        return 'Görev güncellendi';
-      case 'completed':
-        return 'Görev tamamlandı';
-      case 'overdue':
-        return 'Görev süresi doldu';
-      default:
-        return 'Görev durumu değişti';
-    }
-  }
-
-  // Toplantı bildirimi metni
-  String _getMeetingNotificationBody(MeetingModel meeting, String action) {
-    switch (action) {
-      case 'created':
-        return 'Yeni bir toplantı oluşturuldu';
-      case 'updated':
-        return 'Toplantı detayları güncellendi';
-      case 'cancelled':
-        return 'Toplantı iptal edildi';
-      case 'reminder':
-        return 'Toplantı yaklaşıyor';
-      default:
-        return 'Toplantı durumu değişti';
-    }
-  }
-
-  // İş akışı bildirimi metni
-  String _getWorkflowNotificationBody(WorkflowModel workflow, String action) {
-    switch (action) {
-      case 'created':
-        return 'Size yeni bir iş akışı atandı';
-      case 'updated':
-        return 'İş akışı güncellendi';
-      case 'completed':
-        return 'İş akışı tamamlandı';
-      case 'overdue':
-        return 'İş akışı süresi doldu';
-      default:
-        return 'İş akışı durumu değişti';
-    }
-  }
-
-  // Kaynakları temizleme
-  void dispose() {
-    // Firestore bağlantısını kapatma işlemleri burada yapılabilir
-    // Şu an için özel bir temizleme işlemi gerekmiyor
   }
 }
+
+// Arka plan mesaj işleyici
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  print('Arka planda mesaj alındı: ${message.data}');
+} 

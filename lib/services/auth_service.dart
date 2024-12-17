@@ -1,253 +1,324 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
-import '../services/logging_service.dart';
+import '../constants/app_constants.dart';
 
-class AuthService {
+class AuthService with ChangeNotifier {
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
-  final LoggingService _loggingService;
+  final String _collection = AppConstants.usersCollection;
 
+  AuthService({FirebaseAuth? auth, FirebaseFirestore? firestore})
+      : _auth = auth ?? FirebaseAuth.instance,
+        _firestore = firestore ?? FirebaseFirestore.instance;
+
+  Stream<User?> get authStateChanges => _auth.authStateChanges();
   User? get currentUser => _auth.currentUser;
 
-  AuthService({
-    FirebaseAuth? auth,
-    FirebaseFirestore? firestore,
-    LoggingService? loggingService,
-  }) : 
-    _auth = auth ?? FirebaseAuth.instance,
-    _firestore = firestore ?? FirebaseFirestore.instance,
-    _loggingService = loggingService ?? LoggingService();
-
-  // Kullanıcı girişi
-  Future<UserModel> signInWithUsername(String username, String password) async {
+  Future<UserModel?> getCurrentUserModel() async {
     try {
-      // Kullanıcı adına göre e-posta adresini bul
-      final userDoc = await _firestore
-          .collection('users')
-          .where('name', isEqualTo: username)
+      // Aktif oturum bilgisini SharedPreferences'dan al
+      final activeUsername = await _getActiveUsername();
+      if (activeUsername == null) return null;
+
+      // Kullanıcıyı Firestore'dan bul
+      final userSnapshot = await _firestore
+          .collection(_collection)
+          .where('username', isEqualTo: activeUsername)
           .limit(1)
           .get();
 
-      if (userDoc.docs.isEmpty) {
-        throw 'Kullanıcı bulunamadı';
-      }
+      if (userSnapshot.docs.isEmpty) return null;
 
-      final email = userDoc.docs.first.data()['email'] as String;
+      final userDoc = userSnapshot.docs.first;
+      final userData = Map<String, dynamic>.from(userDoc.data());
 
-      // Firebase Auth ile giriş yap
-      final userCredential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      // Kullanıcı modelini döndür
-      return await getCurrentUserModel();
+      return UserModel.fromMap({...userData, 'id': userDoc.id});
     } catch (e) {
-      print('Giriş hatası: $e');
-      rethrow;
+      print('getCurrentUserModel hatası: $e');
+      return null;
     }
   }
 
-  // Kullanıcı kaydı
-  Future<UserModel> registerWithUsername(
-    String username,
-    String email,
-    String password,
-    String name,
-    String department,
-  ) async {
+  Future<String?> _getActiveUsername() async {
     try {
-      // Kullanıcı adının benzersiz olduğunu kontrol et
-      final existingUser = await _firestore
-          .collection('users')
-          .where('username', isEqualTo: username)
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('active_username');
+    } catch (e) {
+      print('_getActiveUsername hatası: $e');
+      return null;
+    }
+  }
+
+  Future<void> _setActiveUsername(String? username) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (username == null) {
+        await prefs.remove('active_username');
+      } else {
+        await prefs.setString('active_username', username);
+      }
+      notifyListeners();
+    } catch (e) {
+      print('_setActiveUsername hatası: $e');
+    }
+  }
+
+  Future<List<UserModel>> getEmployees() async {
+    final snapshot = await _firestore
+        .collection(_collection)
+        .orderBy('name')
+        .get();
+    return snapshot.docs
+        .map((doc) => UserModel.fromMap({...doc.data(), 'id': doc.id}))
+        .toList();
+  }
+
+  Future<UserModel?> getUserById(String userId) async {
+    final doc = await _firestore.collection(_collection).doc(userId).get();
+    if (!doc.exists) return null;
+    return UserModel.fromMap({...doc.data()!, 'id': doc.id});
+  }
+
+  Future<void> updateUser(UserModel user) async {
+    await _firestore.collection(_collection).doc(user.id).update(user.toMap());
+    notifyListeners();
+  }
+
+  Future<void> updateUserStatus(String userId, bool isActive) async {
+    await _firestore.collection(_collection).doc(userId).update({
+      'isActive': isActive,
+    });
+    notifyListeners();
+  }
+
+  Future<void> updateUserRole(String userId, String role) async {
+    await _firestore.collection(_collection).doc(userId).update({
+      'role': role,
+    });
+    notifyListeners();
+  }
+
+  Stream<List<UserModel>> getAllUsersStream() {
+    return _firestore
+        .collection(_collection)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => UserModel.fromMap({...doc.data(), 'id': doc.id}))
+            .toList());
+  }
+
+  Future<void> updateUserPassword(String currentPassword, String newPassword) async {
+    if (currentUser == null) {
+      throw Exception('Kullanıcı oturum açmamış');
+    }
+
+    final credential = EmailAuthProvider.credential(
+      email: currentUser!.email!,
+      password: currentPassword,
+    );
+
+    try {
+      await currentUser!.reauthenticateWithCredential(credential);
+      await currentUser!.updatePassword(newPassword);
+      notifyListeners();
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'wrong-password':
+          throw Exception('Mevcut şifre yanlış');
+        case 'weak-password':
+          throw Exception('Yeni şifre çok zayıf');
+        default:
+          throw Exception('Şifre güncellenirken hata oluştu: ${e.message}');
+      }
+    }
+  }
+
+  Future<void> changePassword(String currentPassword, String newPassword) async {
+    await updateUserPassword(currentPassword, newPassword);
+  }
+
+  Future<UserModel> signInWithEmailAndPassword({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      print('Giriş denemesi - Kullanıcı adı: $email');
+      
+      final userSnapshot = await _firestore
+          .collection(_collection)
+          .where('username', isEqualTo: email)
+          .limit(1)
           .get();
 
-      if (existingUser.docs.isNotEmpty) {
-        throw 'Bu kullanıcı adı zaten kullanılıyor';
+      print('Bulunan kullanıcı sayısı: ${userSnapshot.docs.length}');
+
+      if (userSnapshot.docs.isEmpty) {
+        throw Exception('Kullanıcı bulunamadı');
       }
 
-      // Firebase Auth ile kayıt ol
-      final userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      final userDoc = userSnapshot.docs.first;
+      final userData = Map<String, dynamic>.from(userDoc.data());
 
-      // Firestore'a kullanıcı bilgilerini kaydet
-      final user = UserModel(
-        id: userCredential.user!.uid,
-        username: username,
-        email: email,
+      print('Kullanıcı verileri: ${userData.toString()}');
+      print('Girilen şifre: $password');
+      print('Kayıtlı şifre: ${userData['password']}');
+
+      if (password != userData['password'].toString()) {
+        throw Exception('Yanlış şifre');
+      }
+
+      // Aktif kullanıcı adını kaydet
+      await _setActiveUsername(email);
+
+      // Son giriş zamanını güncelle
+      await _firestore.collection(_collection).doc(userDoc.id).update({
+        'lastLoginAt': FieldValue.serverTimestamp(),
+        'isActive': true, // Kullanıcıyı aktif olarak işaretle
+      });
+
+      // Eksik alanları varsayılan değerlerle doldur
+      final completeUserData = {
+        ...userData,
+        'id': userDoc.id,
+        'isActive': true,
+        'createdAt': userData['createdAt'] ?? Timestamp.now(),
+        'permissions': List<String>.from(userData['permissions'] ?? []),
+        'preferences': Map<String, dynamic>.from(userData['preferences'] ?? {}),
+      };
+
+      print('Tamamlanmış kullanıcı verileri: $completeUserData');
+
+      final userModel = UserModel.fromMap(completeUserData);
+      print('Giriş başarılı - Kullanıcı: ${userModel.name}, Rol: ${userModel.role}');
+      return userModel;
+    } catch (e) {
+      print('Giriş hatası: $e');
+      throw Exception('Giriş yapılırken hata oluştu: $e');
+    }
+  }
+
+  Future<UserModel> registerWithEmailAndPassword({
+    required String email,
+    required String password,
+    required String name,
+    required String username,
+    required String department,
+    String role = AppConstants.roleEmployee,
+  }) async {
+    try {
+      print('Kayıt başlıyor - Kullanıcı adı: $username');
+      
+      // Önce kullanıcı adının benzersiz olduğunu kontrol et
+      final usernameSnapshot = await _firestore
+          .collection(_collection)
+          .where('username', isEqualTo: username)
+          .get();
+      
+      if (usernameSnapshot.docs.isNotEmpty) {
+        throw Exception('Bu kullanıcı adı zaten kullanımda');
+      }
+
+      // Yeni kullanıcı ID'si oluştur
+      final docRef = _firestore.collection(_collection).doc();
+
+      final userModel = UserModel(
+        id: docRef.id,
         name: name,
+        email: email,
+        username: username,
+        role: role,
         department: department,
-        role: 'user',
         createdAt: DateTime.now(),
       );
 
-      await _firestore
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .set(user.toMap());
+      final userData = <String, dynamic>{
+        ...userModel.toMap(),
+        'password': password, // Gerçek uygulamada güvenli hash kullanılmalı
+      };
 
-      return user;
+      print('Kaydedilecek kullanıcı verileri: ${userData.toString()}');
+
+      // Kullanıcı verilerini ve şifreyi kaydet
+      await docRef.set(userData).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw Exception('İşlem zaman aşımına uğradı. Lütfen internet bağlantınızı kontrol edin.'),
+      );
+
+      print('Kullanıcı başarıyla oluşturuldu: ${userModel.id}');
+      
+      // Sadece kullanıcı modelini döndür, otomatik giriş yapma
+      return userModel;
     } catch (e) {
       print('Kayıt hatası: $e');
-      rethrow;
+      if (e.toString().contains('PERMISSION_DENIED')) {
+        throw Exception('Yetki hatası: Firebase kurallarını kontrol edin');
+      } else if (e.toString().contains('network')) {
+        throw Exception('İnternet bağlantısı hatası. Lütfen bağlantınızı kontrol edin.');
+      }
+      throw Exception('Kayıt olurken hata oluştu: $e');
     }
   }
 
-  // Çıkış yap
   Future<void> signOut() async {
-    try {
-      await _auth.signOut();
-    } catch (e) {
-      print('Çıkış hatası: $e');
-      rethrow;
-    }
+    await _setActiveUsername(null);
+    await _auth.signOut();
+    notifyListeners();
   }
 
-  // Mevcut kullanıcı modelini getir
-  Future<UserModel> getCurrentUserModel() async {
-    try {
-      if (_auth.currentUser == null) {
-        throw 'Oturum açılmamış';
-      }
-
-      final doc = await _firestore
-          .collection('users')
-          .doc(_auth.currentUser!.uid)
-          .get();
-
-      if (!doc.exists) {
-        throw 'Kullanıcı bulunamadı';
-      }
-
-      return UserModel.fromFirestore(doc);
-    } catch (e) {
-      print('Kullanıcı modeli getirme hatası: $e');
-      rethrow;
-    }
-  }
-
-  // Mevcut kullanıcıyı getir
-  Future<UserModel> getCurrentUser() async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) {
-        throw 'Oturum açık değil';
-      }
-
-      final userDoc = await _firestore.collection('users').doc(user.uid).get();
-      if (!userDoc.exists) {
-        throw 'Kullanıcı bulunamadı';
-      }
-
-      return UserModel.fromFirestore(userDoc);
-    } catch (e) {
-      print('Kullanıcı getirme hatası: $e');
-      rethrow;
-    }
-  }
-
-  // Kullanıcı profilini güncelle
-  Future<void> updateUserProfile({
-    required String displayName,
-    required String photoUrl,
-  }) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) throw Exception('Kullanıcı oturum açmamış');
-
-      await user.updateDisplayName(displayName);
-      await user.updatePhotoURL(photoUrl);
-
-      await _firestore.collection('users').doc(user.uid).update({
-        'displayName': displayName,
-        'photoUrl': photoUrl,
-      });
-
-      await _loggingService.info(
-        'Kullanıcı profili güncellendi',
-        module: 'auth',
-        data: {
-          'userId': user.uid,
-          'displayName': displayName,
-        },
-      );
-    } catch (e) {
-      await _loggingService.error(
-        'Profil güncelleme hatası',
-        module: 'auth',
-        error: e,
-      );
-      rethrow;
-    }
-  }
-
-  // Şifre değiştir
-  Future<void> changePassword({
-    required String currentPassword,
-    required String newPassword,
-  }) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) throw Exception('Kullanıcı oturum açmamış');
-
-      // Mevcut şifreyi doğrula
-      final credential = EmailAuthProvider.credential(
-        email: user.email!,
-        password: currentPassword,
-      );
-      await user.reauthenticateWithCredential(credential);
-
-      // Yeni şifreyi ayarla
-      await user.updatePassword(newPassword);
-
-      await _loggingService.info(
-        'Kullanıcı şifresi değiştirildi',
-        module: 'auth',
-        data: {'userId': user.uid},
-      );
-    } catch (e) {
-      await _loggingService.error(
-        'Şifre değiştirme hatası',
-        module: 'auth',
-        error: e,
-      );
-      rethrow;
-    }
-  }
-
-  // Şifremi unuttum
   Future<void> resetPassword(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email);
-    } catch (e) {
-      print('Şifre sıfırlama hatası: $e');
-      rethrow;
-    }
-  }
-
-  // Kullanıcı sil
-  Future<void> deleteUser(String userId) async {
-    try {
-      await _firestore.collection('users').doc(userId).delete();
-      if (_auth.currentUser?.uid == userId) {
-        await _auth.currentUser?.delete();
+      notifyListeners();
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'user-not-found':
+          throw Exception('Bu e-posta adresiyle kayıtlı kullanıcı bulunamadı');
+        case 'invalid-email':
+          throw Exception('Geçersiz e-posta adresi');
+        default:
+          throw Exception('Şifre sıfırlama e-postası gönderilirken hata oluştu: ${e.message}');
       }
-    } catch (e) {
-      print('Kullanıcı silme hatası: $e');
-      rethrow;
     }
   }
 
-  // Tüm kullanıcıları getir
+  Future<void> deleteAccount(String password) async {
+    if (currentUser == null) {
+      throw Exception('Kullanıcı oturum açmamış');
+    }
+
+    try {
+      final credential = EmailAuthProvider.credential(
+        email: currentUser!.email!,
+        password: password,
+      );
+
+      await currentUser!.reauthenticateWithCredential(credential);
+      await _firestore.collection(_collection).doc(currentUser!.uid).delete();
+      await currentUser!.delete();
+      notifyListeners();
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'wrong-password':
+          throw Exception('Yanlış şifre');
+        case 'requires-recent-login':
+          throw Exception('Bu işlem için yeniden giriş yapmanız gerekiyor');
+        default:
+          throw Exception('Hesap silinirken hata oluştu: ${e.message}');
+      }
+    }
+  }
+
   Future<List<UserModel>> getAllUsers() async {
     try {
-      final querySnapshot = await _firestore.collection('users').get();
+      final querySnapshot = await _firestore.collection(_collection).get();
       return querySnapshot.docs
-          .map((doc) => UserModel.fromFirestore(doc))
+          .map((doc) => UserModel.fromMap({
+                ...doc.data(),
+                'id': doc.id,
+              }))
           .toList();
     } catch (e) {
       print('Kullanıcıları getirme hatası: $e');
@@ -255,84 +326,109 @@ class AuthService {
     }
   }
 
-  // Departmana göre kullanıcıları getir
-  Future<List<UserModel>> getUsersByDepartment(String department) async {
+  Future<void> deleteUser(String userId) async {
     try {
-      final querySnapshot = await _firestore
-          .collection('users')
-          .where('department', isEqualTo: department)
+      await _firestore.collection(_collection).doc(userId).delete();
+      notifyListeners();
+    } catch (e) {
+      print('Kullanıcı silme hatası: $e');
+      rethrow;
+    }
+  }
+
+  Future<UserModel> signInWithUsername(String username, String password) async {
+    try {
+      print('Giriş denemesi - Kullanıcı adı: $username');
+      
+      final userSnapshot = await _firestore
+          .collection(_collection)
+          .where('username', isEqualTo: username)
+          .limit(1)
           .get();
-      return querySnapshot.docs
-          .map((doc) => UserModel.fromFirestore(doc))
-          .toList();
-    } catch (e) {
-      print('Departman kullanıcılarını getirme hatası: $e');
-      rethrow;
-    }
-  }
 
-  // Kullanıcı rolünü güncelle
-  Future<void> updateUserRole(String userId, String newRole) async {
-    try {
-      await _firestore.collection('users').doc(userId).update({
-        'role': newRole,
-      });
-    } catch (e) {
-      print('Error updating user role: $e');
-      rethrow;
-    }
-  }
-
-  // Kullanıcı durumunu güncelle
-  Future<void> updateUserStatus(String userId, bool isActive) async {
-    try {
-      await _firestore.collection('users').doc(userId).update({
-        'isActive': isActive,
-      });
-    } catch (e) {
-      print('Error updating user status: $e');
-      rethrow;
-    }
-  }
-
-  // Tüm kullanıcıları getir (stream)
-  Stream<List<UserModel>> getAllUsersStream() {
-    return _firestore.collection('users').snapshots().map((snapshot) {
-      return snapshot.docs
-          .map((doc) => UserModel.fromMap(doc.data() as Map<String, dynamic>))
-          .toList();
-    });
-  }
-
-  // Kullanıcı şifresini güncelle
-  Future<void> updateUserPassword(String newPassword) async {
-    try {
-      final user = await getCurrentUser();
-      if (user == null) {
-        throw Exception('Kullanıcı oturumu bulunamadı');
+      if (userSnapshot.docs.isEmpty) {
+        throw Exception('Kullanıcı bulunamadı');
       }
-      await user.updatePassword(newPassword);
+
+      final userDoc = userSnapshot.docs.first;
+      final userData = Map<String, dynamic>.from(userDoc.data());
+
+      if (password != userData['password'].toString()) {
+        throw Exception('Yanlış şifre');
+      }
+
+      // Aktif kullanıcı adını kaydet
+      await _setActiveUsername(username);
+
+      // Son giriş zamanını güncelle
+      await _firestore.collection(_collection).doc(userDoc.id).update({
+        'lastLoginAt': FieldValue.serverTimestamp(),
+        'isActive': true,
+      });
+
+      final completeUserData = {
+        ...userData,
+        'id': userDoc.id,
+        'isActive': true,
+        'createdAt': userData['createdAt'] ?? Timestamp.now(),
+        'permissions': List<String>.from(userData['permissions'] ?? []),
+        'preferences': Map<String, dynamic>.from(userData['preferences'] ?? {}),
+      };
+
+      final userModel = UserModel.fromMap(completeUserData);
+      print('Giriş başarılı - Kullanıcı: ${userModel.name}, Rol: ${userModel.role}');
+      return userModel;
     } catch (e) {
-      throw Exception('Şifre güncellenirken hata oluştu: $e');
+      print('Giriş hatası: $e');
+      throw Exception('Giriş yapılırken hata oluştu: $e');
     }
   }
 
-  // Kullanıcı bilgilerini güncelle
-  Future<void> updateUser(String userId, Map<String, dynamic> data) async {
+  Future<UserModel> registerUser({
+    required String username,
+    required String password,
+    required String name,
+    required String email,
+    required String department,
+    String role = AppConstants.roleEmployee,
+  }) async {
     try {
-      await _firestore.collection('users').doc(userId).update(data);
-      await _loggingService.info(
-        'Kullanıcı bilgileri güncellendi',
-        module: 'auth',
-        data: {'userId': userId, 'updatedFields': data.keys.toList()},
+      print('Kayıt başlıyor - Kullanıcı adı: $username');
+      
+      // Kullanıcı adının benzersiz olduğunu kontrol et
+      final usernameSnapshot = await _firestore
+          .collection(_collection)
+          .where('username', isEqualTo: username)
+          .get();
+      
+      if (usernameSnapshot.docs.isNotEmpty) {
+        throw Exception('Bu kullanıcı adı zaten kullanımda');
+      }
+
+      // Yeni kullanıcı ID'si oluştur
+      final docRef = _firestore.collection(_collection).doc();
+
+      final userModel = UserModel(
+        id: docRef.id,
+        name: name,
+        email: email,
+        username: username,
+        role: role,
+        department: department,
+        createdAt: DateTime.now(),
       );
+
+      final userData = {
+        ...userModel.toMap(),
+        'password': password,
+      };
+
+      await docRef.set(userData);
+
+      return userModel;
     } catch (e) {
-      await _loggingService.error(
-        'Kullanıcı güncelleme hatası',
-        module: 'auth',
-        error: e,
-      );
-      rethrow;
+      print('Kayıt hatası: $e');
+      throw Exception('Kayıt olurken hata oluştu: $e');
     }
   }
 }

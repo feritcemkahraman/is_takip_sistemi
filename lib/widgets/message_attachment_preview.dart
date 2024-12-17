@@ -1,171 +1,113 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../models/message_model.dart';
 
 class MessageAttachmentPreview extends StatelessWidget {
-  final MessageAttachment attachment;
-  final MessageModel message;
+  final String url;
+  final String type;
 
   const MessageAttachmentPreview({
-    super.key,
-    required this.attachment,
-    required this.message,
-  });
+    Key? key,
+    required this.url,
+    required this.type,
+  }) : super(key: key);
 
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () async {
-        final url = Uri.parse(attachment.url);
-        if (await canLaunchUrl(url)) {
-          await launchUrl(url);
-        }
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: _buildPreview(),
-      ),
-    );
-  }
-
-  Widget _buildPreview() {
-    switch (attachment.type) {
-      case MessageModel.typeImage:
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            attachment.url,
-            fit: BoxFit.cover,
-            width: 200,
-            height: 200,
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) return child;
-              return SizedBox(
-                width: 200,
-                height: 200,
-                child: Center(
-                  child: CircularProgressIndicator(
-                    value: loadingProgress.expectedTotalBytes != null
-                        ? loadingProgress.cumulativeBytesLoaded /
-                            loadingProgress.expectedTotalBytes!
-                        : null,
-                  ),
-                ),
-              );
-            },
-            errorBuilder: (context, error, stackTrace) {
-              return const SizedBox(
-                width: 200,
-                height: 200,
-                child: Center(
-                  child: Icon(Icons.error),
-                ),
-              );
-            },
-          ),
-        );
-
-      case MessageModel.typeVideo:
-        return Container(
-          width: 200,
-          height: 200,
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.play_circle_filled, size: 48),
-              const SizedBox(height: 8),
-              Text(
-                attachment.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        );
-
-      case MessageModel.typeVoice:
-        return Container(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.mic),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Sesli mesaj'),
-                  Text(
-                    attachment.formattedSize,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-
-      case MessageModel.typeFile:
-      default:
-        return Container(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(_getFileIcon()),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      attachment.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      attachment.formattedSize,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
+  Future<void> _openUrl() async {
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        throw 'URL açılamadı: $url';
+      }
+    } catch (e) {
+      print('URL açılırken hata: $e');
     }
   }
 
-  IconData _getFileIcon() {
-    final extension = attachment.fileExtension.toLowerCase();
+  @override
+  Widget build(BuildContext context) {
+    switch (type) {
+      case 'image':
+        return GestureDetector(
+          onTap: _openUrl,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(
+              url,
+              width: 200,
+              height: 200,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return SizedBox(
+                  width: 200,
+                  height: 200,
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      value: loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                          : null,
+                    ),
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  width: 200,
+                  height: 200,
+                  color: Colors.grey[300],
+                  child: const Center(
+                    child: Icon(Icons.error),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
 
-    switch (extension) {
-      case 'pdf':
-        return Icons.picture_as_pdf;
-      case 'doc':
-      case 'docx':
-        return Icons.description;
-      case 'xls':
-      case 'xlsx':
-        return Icons.table_chart;
-      case 'ppt':
-      case 'pptx':
-        return Icons.slideshow;
-      case 'zip':
-      case 'rar':
-      case '7z':
-        return Icons.folder_zip;
-      case 'txt':
-        return Icons.text_snippet;
+      case 'voice':
+        return GestureDetector(
+          onTap: _openUrl,
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.mic),
+                SizedBox(width: 8),
+                Text('Sesli Mesaj'),
+              ],
+            ),
+          ),
+        );
+
+      case 'file':
+        return GestureDetector(
+          onTap: _openUrl,
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.attach_file),
+                SizedBox(width: 8),
+                Text('Dosya'),
+              ],
+            ),
+          ),
+        );
+
       default:
-        return Icons.insert_drive_file;
+        return const SizedBox();
     }
   }
 } 

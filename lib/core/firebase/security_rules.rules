@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isAssignedToWorkflow(workflowId) {
+      return isSignedIn() && 
+        request.auth.uid in get(/databases/$(database)/documents/workflows/$(workflowId)).data.assignedTo;
+    }
+
+    function isAssignedToStep(workflowId, stepId) {
+      return isSignedIn() && 
+        request.auth.uid in get(/databases/$(database)/documents/workflows/$(workflowId)/steps/$(stepId)).data.assignedTo;
+    }
+
+    function isWorkflowCreator(workflowId) {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/workflows/$(workflowId)).data.createdBy == request.auth.uid;
+    }
+
+    // Workflow rules
+    match /workflows/{workflowId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        isAssignedToWorkflow(workflowId) || 
+        isWorkflowCreator(workflowId)
+      );
+      
+      allow create: if isSignedIn() && (
+        isAdmin() || 
+        request.resource.data.createdBy == request.auth.uid
+      );
+      
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        isWorkflowCreator(workflowId) || 
+        (isAssignedToWorkflow(workflowId) && 
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['status', 'updatedAt', 'updatedBy']))
+      );
+      
+      allow delete: if isAdmin() || isWorkflowCreator(workflowId);
+
+      // Step rules
+      match /steps/{stepId} {
+        allow read: if isSignedIn() && (
+          isAdmin() || 
+          isAssignedToWorkflow(workflowId) || 
+          isWorkflowCreator(workflowId)
+        );
+        
+        allow create: if isSignedIn() && (
+          isAdmin() || 
+          isWorkflowCreator(workflowId)
+        );
+        
+        allow update: if isSignedIn() && (
+          isAdmin() || 
+          isWorkflowCreator(workflowId) || 
+          (isAssignedToStep(workflowId, stepId) && 
+           request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'completedAt', 'updatedAt', 'updatedBy']))
+        );
+        
+        allow delete: if isAdmin() || isWorkflowCreator(workflowId);
+      }
+    }
+
+    // User rules
+    match /users/{userId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        request.auth.uid == userId
+      );
+      
+      allow create: if isAdmin();
+      allow update: if isAdmin() || request.auth.uid == userId;
+      allow delete: if isAdmin();
+    }
+
+    // FCM Token rules
+    match /fcmTokens/{tokenId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        resource.data.userId == request.auth.uid
+      );
+      
+      allow create, update: if isSignedIn() && 
+        request.resource.data.userId == request.auth.uid;
+      
+      allow delete: if isSignedIn() && 
+        resource.data.userId == request.auth.uid;
+    }
+  }
+}

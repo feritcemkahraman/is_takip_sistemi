@@ -65,9 +65,9 @@ class AppConstants {
   static const String dateTimeFormat = 'dd.MM.yyyy HH:mm';
 
   // Hata mesajları
-  static const String genericError = 'Bir hata oluştu. Lütfen tekrar deneyin.';
-  static const String networkError = 'İnternet bağlantısı hatası.';
-  static const String authError = 'Oturum açma hatası.';
-  static const String validationError = 'Lütfen tüm alanları doldurun.';
-  static const String permissionError = 'Bu işlem için yetkiniz yok.';
+  static const String genericError = 'Maalesef bir hata oluştu. Lütfen daha sonra tekrar deneyin veya desteğe başvurun.';
+  static const String networkError = 'İnternet bağlantınızı kontrol edin ve tekrar deneyin.';
+  static const String authError = 'Kimlik doğrulama hatası. Lütfen giriş bilgilerinizi kontrol edin.';
+  static const String validationError = 'Lütfen tüm zorunlu alanları eksiksiz ve doğru şekilde doldurun.';
+  static const String permissionError = 'Bu işlemi gerçekleştirmek için yetkiniz bulunmuyor.';
 }

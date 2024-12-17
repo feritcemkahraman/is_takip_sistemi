@@ -1,148 +1,144 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/chat_model.dart';
+import '../models/user_model.dart';
 import '../services/chat_service.dart';
-import '../services/auth_service.dart';
-import '../widgets/chat_list_item.dart';
+import '../services/user_service.dart';
 import 'chat_detail_screen.dart';
-import 'create_group_chat_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
-  const ChatListScreen({super.key});
+  const ChatListScreen({Key? key}) : super(key: key);
 
   @override
   State<ChatListScreen> createState() => _ChatListScreenState();
 }
 
 class _ChatListScreenState extends State<ChatListScreen> {
-  final _chatService = ChatService();
-  final _authService = AuthService();
-  String? _currentUserId;
-  bool _isLoading = true;
+  late ChatService _chatService;
+  late UserService _userService;
+  List<ChatModel> _chats = [];
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeUser();
+    _chatService = Provider.of<ChatService>(context, listen: false);
+    _userService = Provider.of<UserService>(context, listen: false);
+    _loadChats();
   }
 
-  Future<void> _initializeUser() async {
-    final user = await _authService.getCurrentUser();
-    if (user != null) {
+  Future<void> _loadChats() async {
+    try {
+      setState(() => _isLoading = true);
+      final currentUser = await _chatService.getCurrentUser();
+      final chats = await _chatService.searchChats('');
       setState(() {
-        _currentUserId = user.uid;
+        _chats = chats;
         _isLoading = false;
       });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sohbetler yüklenirken hata: $e')),
+        );
+      }
+      setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _openChat(ChatModel chat) async {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatDetailScreen(chat: chat),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sohbetler'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              // TODO: Sohbet arama ekranına yönlendir
-            },
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'new_group':
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const CreateGroupChatScreen(),
+    return _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : _chats.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.chat_bubble_outline,
+                      size: 64,
+                      color: Colors.grey[400],
                     ),
-                  );
-                  break;
-                case 'settings':
-                  // TODO: Sohbet ayarları ekranına yönlendir
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'new_group',
-                child: Row(
-                  children: [
-                    Icon(Icons.group_add),
-                    SizedBox(width: 8),
-                    Text('Yeni Grup'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'settings',
-                child: Row(
-                  children: [
-                    Icon(Icons.settings),
-                    SizedBox(width: 8),
-                    Text('Ayarlar'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      body: StreamBuilder<List<ChatModel>>(
-        stream: _chatService.getUserChats(_currentUserId!),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Bir hata oluştu: ${snapshot.error}'),
-            );
-          }
-
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final chats = snapshot.data!;
-          if (chats.isEmpty) {
-            return const Center(
-              child: Text('Henüz sohbet bulunmuyor'),
-            );
-          }
-
-          return ListView.builder(
-            itemCount: chats.length,
-            itemBuilder: (context, index) {
-              final chat = chats[index];
-              return ChatListItem(
-                chat: chat,
-                currentUserId: _currentUserId!,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ChatDetailScreen(
-                        chat: chat,
-                        currentUserId: _currentUserId!,
+                    const SizedBox(height: 16),
+                    Text(
+                      'Henüz sohbet yok',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey[600],
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Yeni bir sohbet başlatmak için + butonuna tıklayın',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : ListView.builder(
+                itemCount: _chats.length,
+                itemBuilder: (context, index) {
+                  final chat = _chats[index];
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: Colors.blue.withOpacity(0.1),
+                      child: Text(
+                        chat.name[0].toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    title: Text(chat.name),
+                    subtitle: chat.lastMessage != null
+                        ? Text(
+                            chat.lastMessage!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        : null,
+                    trailing: chat.lastMessageTime != null
+                        ? Text(
+                            _formatDate(chat.lastMessageTime!),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
+                          )
+                        : null,
+                    onTap: () => _openChat(chat),
                   );
                 },
               );
-            },
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // TODO: Yeni sohbet başlatma ekranına yönlendir
-        },
-        child: const Icon(Icons.chat),
-      ),
-    );
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays == 0) {
+      return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } else if (difference.inDays == 1) {
+      return 'Dün';
+    } else if (difference.inDays < 7) {
+      final weekdays = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+      return weekdays[date.weekday - 1];
+    } else {
+      return '${date.day}/${date.month}/${date.year}';
+    }
   }
 } 

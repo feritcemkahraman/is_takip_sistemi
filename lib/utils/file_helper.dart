@@ -4,11 +4,16 @@ import 'package:intl/intl.dart';
 
 class FileHelper {
   // Geçici dosya oluştur
-  static Future<File> createTempFile(String title, String extension) async {
-    final tempDir = await getTemporaryDirectory();
-    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-    final fileName = _sanitizeFileName('${title}_$timestamp.$extension');
-    return File('${tempDir.path}/$fileName');
+  static Future<File?> createTempFile(String title, String extension) async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final fileName = _sanitizeFileName('${title}_$timestamp.$extension');
+      return File('${tempDir.path}/$fileName');
+    } catch (e) {
+      print('Geçici dosya oluşturulurken hata: $e');
+      return null;
+    }
   }
 
   // Dosya adını temizle
@@ -43,31 +48,32 @@ class FileHelper {
             (file.path.endsWith('.pdf') || file.path.endsWith('.xlsx'))) {
           final stat = await file.stat();
           if (stat.modified.isBefore(maxAgeDate)) {
-            try {
-              await file.delete();
-            } catch (e) {
-              print('Dosya silinirken hata: ${e.toString()}');
-            }
+            await file.delete();
           }
         }
       }
     } catch (e) {
-      print('Geçici dosyalar temizlenirken hata: ${e.toString()}');
+      print('Geçici dosyalar temizlenirken hata: $e');
     }
   }
 
   // Dosya boyutunu kontrol et
   static Future<bool> checkFileSize(File file, {int maxSizeMB = 10}) async {
-    final sizeInBytes = await file.length();
-    final sizeInMB = sizeInBytes / (1024 * 1024);
-    return sizeInMB <= maxSizeMB;
+    try {
+      final sizeInBytes = await file.length();
+      final sizeInMB = sizeInBytes / (1024 * 1024);
+      return sizeInMB <= maxSizeMB;
+    } catch (e) {
+      print('Dosya boyutu kontrol edilirken hata: $e');
+      return false;
+    }
   }
 
   // Dosya izinlerini kontrol et
   static Future<bool> checkFilePermissions(File file) async {
     try {
       // Okuma izni kontrolü
-      final canRead = await file.exists() && await file.stat() != null;
+      final canRead = await file.exists();
       if (!canRead) return false;
 
       // Yazma izni kontrolü
@@ -79,6 +85,7 @@ class FileHelper {
         return false;
       }
     } catch (e) {
+      print('Dosya izinleri kontrol edilirken hata: $e');
       return false;
     }
   }
@@ -133,7 +140,7 @@ class FileHelper {
     final writer = file.openWrite();
     try {
       await for (var chunk in chunks) {
-        writer.write(chunk);
+        writer.add(chunk);
       }
     } finally {
       await writer.close();
@@ -179,7 +186,7 @@ class FileHelper {
       await writer.close();
       return true;
     } catch (e) {
-      print('Parçalı transfer hatası: ${e.toString()}');
+      print('Parçalı transfer hatası: $e');
       return false;
     }
   }
