@@ -308,14 +308,17 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                     ? []
                     : _filteredUsers.isEmpty
                         ? [
-                            const DropdownMenuItem(
+                            DropdownMenuItem(
                               value: '',
                               enabled: false,
-                              child: Text(
-                                'Bu departmanda henüz görevli bulunmamaktadır',
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontStyle: FontStyle.italic,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                child: const Text(
+                                  'Seçilen departmanda görevli bulunmamaktadır',
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ),
                             )
@@ -323,7 +326,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                         : _filteredUsers.map((user) {
                             return DropdownMenuItem(
                               value: user.id,
-                              child: Text('${user.name} (${user.department})'),
+                              child: Text('${user.name}'),
                             );
                           }).toList(),
                 onChanged: _selectedDepartment == null || _selectedDepartment!.isEmpty || _filteredUsers.isEmpty
@@ -333,6 +336,9 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                           _assignedTo = value;
                         });
                       },
+                icon: const Icon(Icons.arrow_drop_down),
+                isDense: true,
+                isExpanded: true,
                 validator: (value) {
                   if (_selectedDepartment != null && 
                       !_selectedDepartment!.isEmpty && 
