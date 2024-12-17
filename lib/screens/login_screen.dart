@@ -55,7 +55,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
       // Kullanıcı rolüne göre yönlendirme
       if (user.role == 'admin') {
-        Navigator.pushReplacementNamed(context, '/admin_dashboard');
+        if (context.mounted) {
+          Navigator.pushReplacementNamed(context, '/admin-dashboard-screen');
+        }
       } else {
         // TODO: Çalışan dashboard'u daha sonra eklenecek
         ScaffoldMessenger.of(context).showSnackBar(

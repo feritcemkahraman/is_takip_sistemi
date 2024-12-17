@@ -5,15 +5,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
 import 'services/task_service.dart';
-import 'services/user_service.dart'; // Added import statement
-import 'services/storage_service.dart'; // Added import statement
-import 'services/local_storage_service.dart'; // Added import statement
+import 'services/user_service.dart';
+import 'services/local_storage_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
-import 'screens/create_task_screen.dart';  // Gelişmiş görev oluşturma ekranı
-// import 'screens/tasks/create_task_screen.dart';  // Eski görev oluşturma ekranı
+import 'screens/create_task_screen.dart';
 import 'screens/tasks/active_tasks_screen.dart';
-import 'screens/tasks/pending_tasks_screen.dart';
 import 'screens/tasks/completed_tasks_screen.dart';
 
 void main() async {
@@ -55,13 +52,13 @@ class MyApp extends StatelessWidget {
       supportedLocales: const [
         Locale('tr', 'TR'),
       ],
-      home: const LoginScreen(),
+      initialRoute: '/login-screen',
       routes: {
-        '/admin_dashboard': (context) => const AdminDashboardScreen(),
-        '/create_task': (context) => const CreateTaskScreen(),
-        '/active_tasks': (context) => const ActiveTasksScreen(),
-        '/pending_tasks': (context) => const PendingTasksScreen(),
-        '/completed_tasks': (context) => const CompletedTasksScreen(),
+        '/login-screen': (context) => const LoginScreen(),
+        '/admin-dashboard-screen': (context) => const AdminDashboardScreen(),
+        '/create-task-screen': (context) => const CreateTaskScreen(),
+        '/active-tasks-screen': (context) => const ActiveTasksScreen(),
+        '/completed-tasks-screen': (context) => const CompletedTasksScreen(),
       },
     );
   }

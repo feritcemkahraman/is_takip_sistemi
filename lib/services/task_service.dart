@@ -83,26 +83,25 @@ class TaskService with ChangeNotifier {
     required DateTime deadline,
     required int priority,
     List<String> attachments = const [],
+    Map<String, dynamic> metadata = const {},
   }) async {
     try {
-      final task = {
+      await _firestore.collection(_collection).add({
         'title': title,
         'description': description,
         'assignedTo': assignedTo,
         'createdBy': createdBy,
         'createdAt': FieldValue.serverTimestamp(),
-        'deadline': Timestamp.fromDate(deadline),
+        'deadline': deadline,
         'completedAt': null,
-        'status': 'pending',
+        'status': 'active', // Direkt aktif olarak oluştur
         'priority': priority,
-        'attachments': attachments,  // Artık bu yerel dosya yollarını içerecek
-        'metadata': {},
-      };
-
-      await _firestore.collection('tasks').add(task);
+        'attachments': attachments,
+        'metadata': metadata,
+      });
       notifyListeners();
     } catch (e) {
-      print('createTask hatası: $e');
+      print('Error creating task: $e');
       rethrow;
     }
   }

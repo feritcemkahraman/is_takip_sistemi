@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/task_model.dart';
 import '../../services/task_service.dart';
+import '../../services/user_service.dart';
+import '../../models/user_model.dart';
 
 class CompletedTasksScreen extends StatelessWidget {
   const CompletedTasksScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final userService = Provider.of<UserService>(context);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tamamlanan Görevler'),
@@ -34,49 +38,62 @@ class CompletedTasksScreen extends StatelessWidget {
               }
 
               return ListView.builder(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(16),
                 itemCount: tasks.length,
                 itemBuilder: (context, index) {
                   final task = tasks[index];
-                  return Card(
-                    child: ListTile(
-                      title: Text(task.title),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(task.description),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Tamamlanma: ${task.completedAt?.day}/${task.completedAt?.month}/${task.completedAt?.year}',
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 12,
+                  return FutureBuilder<UserModel?>(
+                    future: userService.getUserById(task.assignedTo),
+                    builder: (context, userSnapshot) {
+                      final user = userSnapshot.data;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          title: Text(
+                            task.title,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ],
-                      ),
-                      trailing: PopupMenuButton(
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            value: 'reactivate',
-                            child: const Text('Tekrar Aktifleştir'),
-                            onTap: () async {
-                              await taskService.updateTaskStatus(
-                                task.id,
-                                'active',
+                          subtitle: Text(
+                            'Atanan: ${user?.name ?? 'Yükleniyor...'}\n'
+                            'Tamamlanma: ${task.completedAt?.toString().split(' ')[0] ?? 'Belirsiz'}\n'
+                            'Açıklama: ${task.description}',
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('Görevi Sil'),
+                                  content: const Text('Bu görevi silmek istediğinize emin misiniz?'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: const Text('İptal'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () async {
+                                        await taskService.deleteTask(task.id);
+                                        if (context.mounted) {
+                                          Navigator.pop(context);
+                                        }
+                                      },
+                                      child: const Text(
+                                        'Sil',
+                                        style: TextStyle(color: Colors.red),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               );
                             },
                           ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: const Text('Sil'),
-                            onTap: () async {
-                              await taskService.deleteTask(task.id);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
+                          isThreeLine: true,
+                        ),
+                      );
+                    },
                   );
                 },
               );
