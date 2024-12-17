@@ -30,6 +30,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   List<UserModel> _filteredUsers = [];
   List<PlatformFile> _selectedFiles = [];
   bool _isLoading = false;
+  String? _selectedDepartment;
 
   @override
   void initState() {
@@ -46,13 +47,16 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
 
   Future<void> _loadUsers() async {
     try {
+      print('Kullanıcılar yükleniyor...');
       final userService = Provider.of<UserService>(context, listen: false);
       final users = await userService.getAllUsers();
+      print('Yüklenen kullanıcı sayısı: ${users.length}');
       setState(() {
         _users = users;
         _filteredUsers = users;
       });
     } catch (e) {
+      print('Kullanıcılar yüklenirken hata: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -66,10 +70,16 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
 
   void _filterUsersByDepartment(String? department) {
     setState(() {
+      _selectedDepartment = department;
+      _assignedTo = ''; // Departman değiştiğinde seçili görevliyi sıfırla
+      
       if (department == null) {
         _filteredUsers = _users;
       } else {
-        _filteredUsers = _users.where((user) => user.department == department).toList();
+        _filteredUsers = _users
+          .where((user) => user.department == department)
+          .toList()
+          ..sort((a, b) => a.name.compareTo(b.name)); // İsimlere göre sırala
       }
     });
   }
@@ -238,19 +248,24 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.person),
                 ),
-                items: _filteredUsers.map((user) {
-                  return DropdownMenuItem(
-                    value: user,
-                    child: Text('${user.name} (${user.department})'),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _assignedTo = value!.id;
-                  });
-                },
+                value: null, // Departman değiştiğinde seçili değeri sıfırladığımız için null
+                items: _selectedDepartment == null 
+                  ? [] // Departman seçilmediyse boş liste
+                  : _filteredUsers.map((user) {
+                      return DropdownMenuItem(
+                        value: user,
+                        child: Text('${user.name} (${user.department})'),
+                      );
+                    }).toList(),
+                onChanged: _selectedDepartment == null 
+                  ? null // Departman seçilmediyse devre dışı bırak
+                  : (value) {
+                      setState(() {
+                        _assignedTo = value!.id;
+                      });
+                    },
                 validator: (value) {
-                  if (value == null) {
+                  if (_selectedDepartment != null && value == null) {
                     return 'Görevli seçimi gerekli';
                   }
                   return null;

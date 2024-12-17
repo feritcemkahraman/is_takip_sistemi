@@ -21,11 +21,21 @@ class UserService {
 
   Future<List<UserModel>> getAllUsers() async {
     try {
+      print('getAllUsers: Firestore sorgusu yapılıyor...');
       final snapshot = await _firestore.collection('users').get();
-      return snapshot.docs
-          .map((doc) => UserModel.fromMap(doc.data()..['id'] = doc.id))
-          .toList();
+      print('getAllUsers: ${snapshot.docs.length} kullanıcı bulundu');
+      
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        print('getAllUsers: Kullanıcı verisi: $data');
+        return UserModel.fromMap({
+          ...data,
+          'id': doc.id,
+          'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
+        });
+      }).toList();
     } catch (e) {
+      print('getAllUsers hatası: $e');
       throw Exception('Kullanıcı listesi alınamadı: $e');
     }
   }
