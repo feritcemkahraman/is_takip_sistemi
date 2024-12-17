@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/task_model.dart';
 
-class TaskService extends ChangeNotifier {
+class TaskService with ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _collection = 'tasks';
 
@@ -26,6 +26,7 @@ class TaskService extends ChangeNotifier {
           .collection(_collection)
           .where('status', isEqualTo: 'active')
           .orderBy('deadline')
+          .orderBy('__name__')
           .get();
       return querySnapshot.docs
           .map((doc) => TaskModel.fromFirestore(doc))
@@ -43,6 +44,7 @@ class TaskService extends ChangeNotifier {
           .collection(_collection)
           .where('status', isEqualTo: 'pending')
           .orderBy('deadline')
+          .orderBy('__name__')
           .get();
       return querySnapshot.docs
           .map((doc) => TaskModel.fromFirestore(doc))
@@ -60,6 +62,7 @@ class TaskService extends ChangeNotifier {
           .collection(_collection)
           .where('status', isEqualTo: 'completed')
           .orderBy('completedAt', descending: true)
+          .orderBy('__name__', descending: true)
           .get();
       return querySnapshot.docs
           .map((doc) => TaskModel.fromFirestore(doc))
@@ -71,16 +74,34 @@ class TaskService extends ChangeNotifier {
   }
 
   // Yeni görev oluştur
-  Future<String?> createTask(TaskModel task) async {
+  Future<void> createTask({
+    required String title,
+    required String description,
+    required String assignedTo,
+    required String createdBy,
+    required DateTime deadline,
+    required int priority,
+    List<String> attachments = const [],
+  }) async {
     try {
-      final docRef = await _firestore
-          .collection(_collection)
-          .add(task.toFirestore());
-      notifyListeners();
-      return docRef.id;
+      final task = {
+        'title': title,
+        'description': description,
+        'assignedTo': assignedTo,
+        'createdBy': createdBy,
+        'createdAt': FieldValue.serverTimestamp(),
+        'deadline': Timestamp.fromDate(deadline),
+        'completedAt': null,
+        'status': 'pending',
+        'priority': priority,
+        'attachments': attachments,
+        'metadata': {},
+      };
+
+      await _firestore.collection('tasks').add(task);
     } catch (e) {
-      print('Error creating task: $e');
-      return null;
+      print('createTask hatası: $e');
+      rethrow;
     }
   }
 

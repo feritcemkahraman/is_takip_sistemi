@@ -5,6 +5,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
 import 'services/task_service.dart';
+import 'services/user_service.dart'; // Added import statement
+import 'services/storage_service.dart'; // Added import statement
 import 'screens/login_screen.dart';
 import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/create_task_screen.dart';  // Gelişmiş görev oluşturma ekranı
@@ -18,7 +20,26 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const MyApp());
+
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<AuthService>(
+          create: (_) => AuthService(),
+        ),
+        ChangeNotifierProvider<UserService>(
+          create: (_) => UserService(),
+        ),
+        ChangeNotifierProvider<TaskService>(
+          create: (_) => TaskService(),
+        ),
+        ChangeNotifierProvider<StorageService>(
+          create: (_) => StorageService(),
+        ),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -26,35 +47,29 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider<AuthService>(create: (_) => AuthService()),
-        ChangeNotifierProvider<TaskService>(create: (_) => TaskService()),
-      ],
-      child: MaterialApp(
-        title: 'İş Takip Sistemi',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-        ),
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: const [
-          Locale('tr', 'TR'),
-        ],
-        home: const LoginScreen(),
-        routes: {
-          '/admin_dashboard': (context) => const AdminDashboardScreen(),
-          '/create_task': (context) => const CreateTaskScreen(),
-          '/active_tasks': (context) => const ActiveTasksScreen(),
-          '/pending_tasks': (context) => const PendingTasksScreen(),
-          '/completed_tasks': (context) => const CompletedTasksScreen(),
-        },
+    return MaterialApp(
+      title: 'İş Takip Sistemi',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('tr', 'TR'),
+      ],
+      home: const LoginScreen(),
+      routes: {
+        '/admin_dashboard': (context) => const AdminDashboardScreen(),
+        '/create_task': (context) => const CreateTaskScreen(),
+        '/active_tasks': (context) => const ActiveTasksScreen(),
+        '/pending_tasks': (context) => const PendingTasksScreen(),
+        '/completed_tasks': (context) => const CompletedTasksScreen(),
+      },
     );
   }
 }

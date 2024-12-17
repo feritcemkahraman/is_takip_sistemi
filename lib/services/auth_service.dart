@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../constants/app_constants.dart';
 
-class AuthService with ChangeNotifier {
+class AuthService extends ChangeNotifier {
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
   final String _collection = AppConstants.usersCollection;

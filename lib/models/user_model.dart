@@ -101,4 +101,9 @@ class UserModel {
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
     );
   }
+
+  @override
+  String toString() {
+    return 'UserModel{id: $id, name: $name, email: $email, role: $role, department: $department, createdAt: $createdAt}';
+  }
 }

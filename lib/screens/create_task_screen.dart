@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import '../services/task_service.dart';
 import '../services/user_service.dart';
 import '../services/auth_service.dart';
+import '../services/storage_service.dart';
 import '../models/user_model.dart';
 import '../models/task_model.dart';
 import '../widgets/custom_text_field.dart';
@@ -21,21 +22,26 @@ class CreateTaskScreen extends StatefulWidget {
 
 class _CreateTaskScreenState extends State<CreateTaskScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _descriptionController = TextEditingController();
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   int _selectedPriority = 1;
-  String _assignedTo = '';
+  String? _assignedTo;
   List<UserModel> _users = [];
   List<UserModel> _filteredUsers = [];
   List<PlatformFile> _selectedFiles = [];
   bool _isLoading = false;
-  String? _selectedDepartment;
+  String? _selectedDepartment = '';
+  late final UserService _userService;
 
   @override
   void initState() {
     super.initState();
-    _loadUsers();
+    print('CreateTaskScreen initState çağrıldı');
+    _userService = Provider.of<UserService>(context, listen: false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadUsers();
+    });
   }
 
   @override
@@ -47,17 +53,26 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
 
   Future<void> _loadUsers() async {
     try {
-      print('Kullanıcılar yükleniyor...');
-      final userService = Provider.of<UserService>(context, listen: false);
-      final users = await userService.getAllUsers();
-      print('Yüklenen kullanıcı sayısı: ${users.length}');
-      setState(() {
-        _users = users;
-        _filteredUsers = users;
-      });
-    } catch (e) {
-      print('Kullanıcılar yüklenirken hata: $e');
+      print('_loadUsers başladı');
+      setState(() => _isLoading = true);
+      
+      final users = await _userService.getAllUsers();
+      print('Kullanıcılar yüklendi. Toplam: ${users.length}');
+      print('Kullanıcı listesi: ${users.map((u) => '${u.name} (${u.department})').join(', ')}');
+      
       if (mounted) {
+        setState(() {
+          _users = users;
+          _filteredUsers = users;
+          _isLoading = false;
+          print('State güncellendi. _users: ${_users.length}, _filteredUsers: ${_filteredUsers.length}');
+        });
+      }
+    } catch (e, stackTrace) {
+      print('_loadUsers hatası: $e');
+      print('Stack trace: $stackTrace');
+      if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Kullanıcılar yüklenirken hata oluştu: $e'),
@@ -69,17 +84,24 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   }
 
   void _filterUsersByDepartment(String? department) {
+    print('_filterUsersByDepartment çağrıldı. Departman: $department');
     setState(() {
       _selectedDepartment = department;
-      _assignedTo = ''; // Departman değiştiğinde seçili görevliyi sıfırla
+      _assignedTo = null;  // Departman değiştiğinde seçili görevliyi sıfırla
       
-      if (department == null) {
+      if (department == null || department.isEmpty) {
+        print('Tüm kullanıcılar listeleniyor...');
         _filteredUsers = _users;
       } else {
+        print('$department departmanındaki kullanıcılar filtreleniyor...');
         _filteredUsers = _users
           .where((user) => user.department == department)
           .toList()
-          ..sort((a, b) => a.name.compareTo(b.name)); // İsimlere göre sırala
+          ..sort((a, b) => a.name.compareTo(b.name));
+      }
+      print('Filtrelenmiş kullanıcı sayısı: ${_filteredUsers.length}');
+      if (_filteredUsers.isEmpty) {
+        print('UYARI: $_selectedDepartment departmanında hiç kullanıcı yok!');
       }
     });
   }
@@ -124,45 +146,68 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
 
   Future<void> _createTask() async {
     if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+      try {
+        setState(() => _isLoading = true);
 
-      final taskService = Provider.of<TaskService>(context, listen: false);
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final currentUser = authService.currentUser;
+        // Görevli seçili değilse hata göster
+        if (_assignedTo == null || _assignedTo!.isEmpty) {
+          throw Exception('Lütfen bir görevli seçin');
+        }
 
-      if (currentUser != null) {
-        final task = TaskModel(
-          id: '',
+        final taskService = Provider.of<TaskService>(context, listen: false);
+        final authService = Provider.of<AuthService>(context, listen: false);
+        final currentUser = authService.currentUser;
+
+        if (currentUser == null) {
+          throw Exception('Oturum açmış kullanıcı bulunamadı');
+        }
+
+        // Dosyaları yükle
+        List<String> attachmentUrls = [];
+        if (_selectedFiles.isNotEmpty) {
+          final storageService = Provider.of<StorageService>(context, listen: false);
+          final taskId = DateTime.now().millisecondsSinceEpoch.toString(); // Geçici task ID
+          
+          attachmentUrls = await Future.wait(
+            _selectedFiles.map((file) => 
+              storageService.uploadTaskAttachment(
+                taskId,
+                File(file.path!),
+              )
+            ),
+          );
+        }
+
+        // Görevi oluştur
+        await taskService.createTask(
           title: _titleController.text,
           description: _descriptionController.text,
-          assignedTo: _assignedTo,
+          assignedTo: _assignedTo!,  // null check yaptığımız için ! kullanabiliriz
           createdBy: currentUser.uid,
-          createdAt: DateTime.now(),
           deadline: _selectedDate,
-          status: 'pending',
           priority: _selectedPriority,
-          attachments: _selectedFiles.map((file) => file.path!).toList(),
-          metadata: {},
+          attachments: attachmentUrls,
         );
 
-        try {
-          await taskService.createTask(task);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Görev başarıyla oluşturuldu')),
-            );
-            Navigator.pop(context);
-          }
-        } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Hata oluştu: $e')),
-            );
-          }
+        if (mounted) {
+          setState(() => _isLoading = false);
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Görev başarıyla oluşturuldu')),
+          );
+        }
+      } catch (e) {
+        print('Görev oluşturma hatası: $e');
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Görev oluşturulurken hata: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
       }
-
-      setState(() => _isLoading = false);
     }
   }
 
@@ -227,9 +272,10 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.business),
                 ),
+                value: _selectedDepartment, // Seçili departmanı belirt
                 items: [
                   const DropdownMenuItem(
-                    value: null,
+                    value: '',  // null yerine boş string kullan
                     child: Text('Tüm Departmanlar'),
                   ),
                   ...AppConstants.departments.map((department) {
@@ -239,34 +285,60 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                     );
                   }).toList(),
                 ],
-                onChanged: _filterUsersByDepartment,
+                onChanged: (value) {
+                  print('Seçilen departman: $value'); // Debug log
+                  _filterUsersByDepartment(value!.isEmpty ? null : value); // Boş string kontrolü
+                },
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Lütfen bir departman seçin';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<UserModel>(
+              DropdownButtonFormField<String>(
                 decoration: const InputDecoration(
                   labelText: 'Görevli',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.person),
                 ),
-                value: null, // Departman değiştiğinde seçili değeri sıfırladığımız için null
-                items: _selectedDepartment == null 
-                  ? [] // Departman seçilmediyse boş liste
-                  : _filteredUsers.map((user) {
-                      return DropdownMenuItem(
-                        value: user,
-                        child: Text('${user.name} (${user.department})'),
-                      );
-                    }).toList(),
-                onChanged: _selectedDepartment == null 
-                  ? null // Departman seçilmediyse devre dışı bırak
-                  : (value) {
-                      setState(() {
-                        _assignedTo = value!.id;
-                      });
-                    },
+                value: _assignedTo,
+                items: _selectedDepartment == null || _selectedDepartment!.isEmpty
+                    ? []
+                    : _filteredUsers.isEmpty
+                        ? [
+                            const DropdownMenuItem(
+                              value: '',
+                              enabled: false,
+                              child: Text(
+                                'Bu departmanda henüz görevli bulunmamaktadır',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            )
+                          ]
+                        : _filteredUsers.map((user) {
+                            return DropdownMenuItem(
+                              value: user.id,
+                              child: Text('${user.name} (${user.department})'),
+                            );
+                          }).toList(),
+                onChanged: _selectedDepartment == null || _selectedDepartment!.isEmpty || _filteredUsers.isEmpty
+                    ? null
+                    : (String? value) {
+                        setState(() {
+                          _assignedTo = value;
+                        });
+                      },
                 validator: (value) {
-                  if (_selectedDepartment != null && value == null) {
-                    return 'Görevli seçimi gerekli';
+                  if (_selectedDepartment != null && 
+                      !_selectedDepartment!.isEmpty && 
+                      _filteredUsers.isNotEmpty && 
+                      (value == null || value.isEmpty)) {
+                    return 'Lütfen bir görevli seçin';
                   }
                   return null;
                 },

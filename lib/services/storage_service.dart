@@ -1,8 +1,9 @@
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path/path.dart' as path;
+import 'package:flutter/foundation.dart'; // Add this line
 
-class StorageService {
+class StorageService extends ChangeNotifier { // Update this line
   final FirebaseStorage _storage;
 
   StorageService({FirebaseStorage? storage})
@@ -40,4 +41,4 @@ class StorageService {
   Future<String> uploadTaskAttachment(String taskId, File file) async {
     return uploadFile('task_attachments/$taskId', file);
   }
-} 
+}
