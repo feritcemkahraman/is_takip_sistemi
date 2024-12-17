@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/task_model.dart';
+import '../services/local_storage_service.dart';
 
 class TaskService with ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -94,11 +95,12 @@ class TaskService with ChangeNotifier {
         'completedAt': null,
         'status': 'pending',
         'priority': priority,
-        'attachments': attachments,
+        'attachments': attachments,  // Artık bu yerel dosya yollarını içerecek
         'metadata': {},
       };
 
       await _firestore.collection('tasks').add(task);
+      notifyListeners();
     } catch (e) {
       print('createTask hatası: $e');
       rethrow;
@@ -121,14 +123,18 @@ class TaskService with ChangeNotifier {
   }
 
   // Görevi sil
-  Future<bool> deleteTask(String id) async {
+  Future<void> deleteTask(String taskId) async {
     try {
-      await _firestore.collection(_collection).doc(id).delete();
+      // Önce görevin dosyalarını sil
+      final localStorageService = LocalStorageService();
+      await localStorageService.deleteTaskAttachments(taskId);
+
+      // Sonra görevi sil
+      await _firestore.collection(_collection).doc(taskId).delete();
       notifyListeners();
-      return true;
     } catch (e) {
-      print('Error deleting task: $e');
-      return false;
+      print('deleteTask hatası: $e');
+      rethrow;
     }
   }
 

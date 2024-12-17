@@ -5,7 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import '../services/task_service.dart';
 import '../services/user_service.dart';
 import '../services/auth_service.dart';
-import '../services/storage_service.dart';
+import '../services/local_storage_service.dart';
 import '../models/user_model.dart';
 import '../models/task_model.dart';
 import '../widgets/custom_text_field.dart';
@@ -149,44 +149,57 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
       try {
         setState(() => _isLoading = true);
 
-        // Görevli seçili değilse hata göster
         if (_assignedTo == null || _assignedTo!.isEmpty) {
           throw Exception('Lütfen bir görevli seçin');
         }
 
         final taskService = Provider.of<TaskService>(context, listen: false);
         final authService = Provider.of<AuthService>(context, listen: false);
-        final currentUser = authService.currentUser;
+        final currentUser = await authService.getCurrentUserModel();
 
         if (currentUser == null) {
           throw Exception('Oturum açmış kullanıcı bulunamadı');
         }
 
-        // Dosyaları yükle
-        List<String> attachmentUrls = [];
+        // Dosyaları yerel olarak kaydet
+        List<String> attachmentPaths = [];
         if (_selectedFiles.isNotEmpty) {
-          final storageService = Provider.of<StorageService>(context, listen: false);
-          final taskId = DateTime.now().millisecondsSinceEpoch.toString(); // Geçici task ID
-          
-          attachmentUrls = await Future.wait(
-            _selectedFiles.map((file) => 
-              storageService.uploadTaskAttachment(
-                taskId,
-                File(file.path!),
-              )
-            ),
-          );
+          final localStorageService = LocalStorageService();
+          final taskId = DateTime.now().millisecondsSinceEpoch.toString();
+
+          for (var file in _selectedFiles) {
+            if (file.path != null) {
+              try {
+                final savedPath = await localStorageService.saveTaskAttachment(
+                  taskId,
+                  File(file.path!),
+                );
+                attachmentPaths.add(savedPath);
+                print('Dosya kaydedildi: ${file.name}');
+              } catch (e) {
+                print('Dosya kaydedilemedi (${file.name}): $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('${file.name} dosyası kaydedilemedi'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            }
+          }
         }
 
         // Görevi oluştur
         await taskService.createTask(
           title: _titleController.text,
           description: _descriptionController.text,
-          assignedTo: _assignedTo!,  // null check yaptığımız için ! kullanabiliriz
-          createdBy: currentUser.uid,
+          assignedTo: _assignedTo!,
+          createdBy: currentUser.id,
           deadline: _selectedDate,
           priority: _selectedPriority,
-          attachments: attachmentUrls,
+          attachments: attachmentPaths,
         );
 
         if (mounted) {
