@@ -96,13 +96,14 @@ class ChatService extends ChangeNotifier {
       final currentUser = _userService.currentUser;
       if (currentUser == null) throw Exception('Kullanıcı oturumu bulunamadı');
 
+      final now = DateTime.now();
       final message = MessageModel(
         id: '',
         chatId: chatId,
         senderId: currentUser.id,
         content: content,
         attachment: attachment,
-        createdAt: DateTime.now(),
+        createdAt: now,
         type: attachment != null ? 'file' : 'text',
       );
 
@@ -114,8 +115,8 @@ class ChatService extends ChangeNotifier {
 
       await _firestore.collection(_collection).doc(chatId).update({
         'lastMessage': content,
-        'lastMessageTime': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
+        'lastMessageTime': now,
+        'updatedAt': now,
       });
     } catch (e) {
       throw Exception('Mesaj gönderilemedi: $e');
@@ -185,15 +186,26 @@ class ChatService extends ChangeNotifier {
   }
 
   Stream<List<MessageModel>> getChatMessages(String chatId) {
-    return _firestore
-        .collection(_collection)
-        .doc(chatId)
-        .collection(_messagesCollection)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => MessageModel.fromFirestore(doc))
-            .toList());
+    try {
+      return _firestore
+          .collection(_collection)
+          .doc(chatId)
+          .collection(_messagesCollection)
+          .snapshots()
+          .map((snapshot) {
+            final messages = snapshot.docs
+                .map((doc) => MessageModel.fromFirestore(doc))
+                .toList();
+            
+            // Mesajları createdAt'e göre sırala
+            messages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            
+            return messages;
+          });
+    } catch (e) {
+      print('Mesajları getirirken hata: $e');
+      return Stream.value([]);
+    }
   }
 
   Future<void> deleteChat(String chatId) async {
@@ -332,49 +344,16 @@ class ChatService extends ChangeNotifier {
     return _firestore
         .collection(_collection)
         .where('participants', arrayContains: currentUser.id)
+        .orderBy('lastMessageTime', descending: true)
         .snapshots()
-        .asyncMap((snapshot) async {
-      List<ChatModel> chats = [];
-      
-      for (var doc in snapshot.docs) {
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
         final data = doc.data();
-        final otherParticipants = List<String>.from(data['participants'])
-            .where((id) => id != currentUser.id)
-            .toList();
-
-        final unreadCount = await _firestore
-            .collection(_collection)
-            .doc(doc.id)
-            .collection(_messagesCollection)
-            .where('isRead', isEqualTo: false)
-            .where('senderId', isNotEqualTo: currentUser.id)
-            .count()
-            .get();
-
-        final chatData = {
+        return ChatModel.fromMap({
           'id': doc.id,
-          'name': data['name'] ?? '',
-          'participants': data['participants'] ?? [],
-          'createdBy': data['createdBy'] ?? '',
-          'createdAt': data['createdAt'] ?? Timestamp.now(),
-          'updatedAt': data['updatedAt'] ?? Timestamp.now(),
-          'lastMessage': data['lastMessage'],
-          'lastMessageTime': data['lastMessageTime'],
-          'unreadCount': unreadCount.count ?? 0,
-          'isGroup': data['isGroup'] ?? false,
-        };
-
-        chats.add(ChatModel.fromMap(chatData));
-      }
-
-      // Sohbetleri son mesaj zamanına göre sırala
-      chats.sort((a, b) {
-        if (a.lastMessageTime == null) return 1;
-        if (b.lastMessageTime == null) return -1;
-        return b.lastMessageTime!.compareTo(a.lastMessageTime!);
-      });
-
-      return chats;
+          ...data,
+        });
+      }).toList();
     });
   }
 } 
