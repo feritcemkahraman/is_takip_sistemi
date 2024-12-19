@@ -112,8 +112,6 @@ class _NewChatScreenState extends State<NewChatScreen> {
         title: const Text('Yeni Sohbet'),
         actions: [
           IconButton(
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
             icon: const Icon(Icons.search),
             onPressed: () {
               showSearch(
@@ -125,7 +123,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
               );
             },
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(

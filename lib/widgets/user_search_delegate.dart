@@ -3,6 +3,7 @@ import '../models/user_model.dart';
 import '../services/user_service.dart';
 import '../services/chat_service.dart';
 import '../screens/chat_detail_screen.dart';
+import '../models/chat_model.dart';
 
 class UserSearchDelegate extends SearchDelegate<UserModel?> {
   final UserService userService;
@@ -95,14 +96,46 @@ class UserSearchDelegate extends SearchDelegate<UserModel?> {
         throw Exception('Kullanıcı oturumu bulunamadı');
       }
 
-      // Yeni sohbet oluştur
+      // Mevcut sohbetleri kontrol et
+      final existingChats = await chatService.getChats().first;
+      
+      // Birebir sohbetleri filtrele
+      final existingChat = existingChats.firstWhere(
+        (chat) => 
+          !chat.isGroup && // Grup sohbeti olmamalı
+          chat.participants.length == 2 && // İki kişilik olmalı
+          chat.participants.contains(currentUser.id) && // Mevcut kullanıcı olmalı
+          chat.participants.contains(user.id), // Seçilen kullanıcı olmalı
+        orElse: () => ChatModel(
+          id: '',
+          name: '',
+          participants: [],
+          createdBy: '',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+
+      // Eğer mevcut bir sohbet varsa, ona yönlendir
+      if (existingChat.id.isNotEmpty) {
+        if (context.mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatDetailScreen(chat: existingChat),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Mevcut sohbet yoksa yeni sohbet oluştur
       final chat = await chatService.createChat(
         name: user.name,
         participants: [user.id],
       );
 
       if (context.mounted) {
-        // Arama ekranını kapat ve sohbet ekranına git
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(

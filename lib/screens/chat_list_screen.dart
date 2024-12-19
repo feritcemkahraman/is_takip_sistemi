@@ -267,6 +267,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
+        centerTitle: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
@@ -371,12 +372,25 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       title: Row(
                         children: [
                           Expanded(
-                            child: Text(
-                              chat.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  chat.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                if (chat.isGroup && chat.participants.isNotEmpty)
+                                  Text(
+                                    '${chat.participants.length} katılımcı',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                           if (chat.lastMessageTime != null)
