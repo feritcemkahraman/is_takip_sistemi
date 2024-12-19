@@ -157,23 +157,112 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    print('Chat isGroup: ${widget.chat.isGroup}');
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.chat.name),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ChatInfoScreen(
-                    chat: widget.chat,
-                  ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(widget.chat.name),
+            if (widget.chat.isGroup)
+              FutureBuilder<List<UserModel>>(
+                future: Future.wait(
+                  widget.chat.participants.map((id) => _userService.getUserById(id))
                 ),
-              );
-            },
-          ),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) return const SizedBox.shrink();
+                  final participants = snapshot.data!.whereType<UserModel>().toList();
+                  return Text(
+                    '${participants.length} katılımcı',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.white70,
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+        actions: [
+          if (widget.chat.isGroup)
+            IconButton(
+              icon: const Icon(Icons.group),
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  builder: (context) => FutureBuilder<List<UserModel>>(
+                    future: Future.wait(
+                      widget.chat.participants.map((id) => _userService.getUserById(id))
+                    ),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      
+                      final participants = snapshot.data!.whereType<UserModel>().toList();
+                      
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Grup Katılımcıları (${participants.length})',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close),
+                                  onPressed: () => Navigator.pop(context),
+                                ),
+                              ],
+                            ),
+                            const Divider(),
+                            Expanded(
+                              child: ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: participants.length,
+                                itemBuilder: (context, index) {
+                                  final user = participants[index];
+                                  return ListTile(
+                                    leading: CircleAvatar(
+                                      child: Text(user.name[0].toUpperCase()),
+                                    ),
+                                    title: Text(user.name),
+                                    subtitle: user.id == widget.chat.createdBy
+                                        ? const Text('Grup Yöneticisi')
+                                        : null,
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.info_outline),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ChatInfoScreen(chat: widget.chat),
+                  ),
+                );
+              },
+            ),
         ],
       ),
       body: Column(
@@ -195,18 +284,37 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 }
 
                 final messages = snapshot.data!;
-                return ListView.builder(
-                  controller: _scrollController,
-                  reverse: true,
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    final isMe = _currentUser?.id == message.senderId;
+                return FutureBuilder<List<UserModel>>(
+                  future: Future.wait(
+                    widget.chat.participants.map((id) => _userService.getUserById(id))
+                  ),
+                  builder: (context, participantsSnapshot) {
+                    if (!participantsSnapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                    return MessageBubble(
-                      message: message,
-                      isMe: isMe,
-                      onLongPress: isMe ? () => _deleteMessage(message) : null,
+                    final participants = participantsSnapshot.data!.whereType<UserModel>().toList();
+                    final participantMap = {
+                      for (var p in participants) p.id: p.name
+                    };
+
+                    return ListView.builder(
+                      controller: _scrollController,
+                      reverse: true,
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final message = messages[index];
+                        final isMe = _currentUser?.id == message.senderId;
+                        final senderName = participantMap[message.senderId];
+
+                        return MessageBubble(
+                          message: message,
+                          isMe: isMe,
+                          chat: widget.chat,
+                          senderName: senderName,
+                          onLongPress: isMe ? () => _deleteMessage(message) : null,
+                        );
+                      },
                     );
                   },
                 );

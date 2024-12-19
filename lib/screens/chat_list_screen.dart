@@ -5,7 +5,7 @@ import '../models/user_model.dart';
 import '../services/chat_service.dart';
 import '../services/user_service.dart';
 import '../widgets/user_search_delegate.dart';
-import 'chat_screen.dart';
+import 'chat_detail_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({Key? key}) : super(key: key);
@@ -91,9 +91,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ChatScreen(
+              builder: (context) => ChatDetailScreen(
                 chat: chat,
-                currentUser: currentUser,
               ),
             ),
           );
@@ -228,9 +227,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ChatScreen(
+              builder: (context) => ChatDetailScreen(
                 chat: chat,
-                currentUser: currentUser,
               ),
             ),
           );
@@ -391,9 +389,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => ChatScreen(
+                          builder: (context) => ChatDetailScreen(
                             chat: chat,
-                            currentUser: currentUser,
                           ),
                         ),
                       );

@@ -37,6 +37,8 @@ class ChatService extends ChangeNotifier {
         throw Exception('Oturum açmış kullanıcı bulunamadı');
       }
 
+      print('Creating chat with isGroup: $isGroup');
+
       // Eğer birebir sohbet ise ve zaten varsa, mevcut sohbeti döndür
       if (!isGroup && participants.length == 1) {
         final existingChat = await _firestore
@@ -66,6 +68,8 @@ class ChatService extends ChangeNotifier {
         'isGroup': isGroup,
         'unreadCount': 0,
       };
+
+      print('Creating chat with data: $chatData');
 
       final docRef = await _firestore.collection(_collection).add(chatData);
       
@@ -204,6 +208,28 @@ class ChatService extends ChangeNotifier {
           });
     } catch (e) {
       print('Mesajları getirirken hata: $e');
+      return Stream.value([]);
+    }
+  }
+
+  Stream<List<UserModel>> getChatParticipants(String chatId) {
+    try {
+      return _firestore
+          .collection(_collection)
+          .doc(chatId)
+          .snapshots()
+          .asyncMap((chatDoc) async {
+            if (!chatDoc.exists) return [];
+            
+            final participants = List<String>.from(chatDoc.data()!['participants']);
+            final userModels = await Future.wait(
+              participants.map((userId) => _userService.getUserById(userId))
+            );
+            
+            return userModels.whereType<UserModel>().toList();
+          });
+    } catch (e) {
+      print('Katılımcıları getirirken hata: $e');
       return Stream.value([]);
     }
   }

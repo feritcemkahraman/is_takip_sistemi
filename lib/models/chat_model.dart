@@ -48,6 +48,7 @@ class ChatModel {
   }
 
   factory ChatModel.fromMap(Map<String, dynamic> map) {
+    print('Creating ChatModel from map: $map');
     return ChatModel(
       id: map['id'] ?? '',
       name: map['name'] ?? '',

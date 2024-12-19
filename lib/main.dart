@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:timeago/timeago.dart' as timeago;
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
 import 'services/task_service.dart';
@@ -25,6 +26,10 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // timeago Türkçe dil desteği
+  timeago.setLocaleMessages('tr', timeago.TrMessages());
+  timeago.setDefaultLocale('tr');
 
   final userService = UserService();
 
