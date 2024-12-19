@@ -113,6 +113,7 @@ class UserSearchDelegate extends SearchDelegate<UserModel?> {
           createdBy: '',
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
+          userService: userService,
         ),
       );
 

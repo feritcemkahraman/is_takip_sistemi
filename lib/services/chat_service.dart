@@ -51,7 +51,7 @@ class ChatService extends ChangeNotifier {
           final chatParticipants = List<String>.from(doc.data()['participants']);
           if (chatParticipants.length == 2 &&
               chatParticipants.contains(participants[0])) {
-            return ChatModel.fromMap({...doc.data(), 'id': doc.id});
+            return ChatModel.fromMap({...doc.data(), 'id': doc.id}, userService: _userService);
           }
         }
       }
@@ -84,6 +84,7 @@ class ChatService extends ChangeNotifier {
         lastMessageTime: null,
         isGroup: isGroup,
         unreadCount: 0,
+        userService: _userService,
       );
     } catch (e) {
       print('Sohbet oluşturma hatası: $e');
@@ -200,7 +201,7 @@ class ChatService extends ChangeNotifier {
         .where('participants', arrayContains: currentUser.id)
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => ChatModel.fromMap({...doc.data(), 'id': doc.id}))
+            .map((doc) => ChatModel.fromMap({...doc.data(), 'id': doc.id}, userService: _userService))
             .toList());
   }
 
@@ -420,8 +421,40 @@ class ChatService extends ChangeNotifier {
         return ChatModel.fromMap({
           'id': doc.id,
           ...data,
-        });
+        }, userService: _userService);
       }).toList();
     });
+  }
+
+  Future<void> toggleMuteChat(String chatId) async {
+    try {
+      final currentUser = _userService.currentUser;
+      if (currentUser == null) {
+        throw Exception('Kullanıcı oturumu bulunamadı');
+      }
+
+      final chatDoc = await _firestore.collection(_collection).doc(chatId).get();
+      if (!chatDoc.exists) {
+        throw Exception('Sohbet bulunamadı');
+      }
+
+      final chatData = chatDoc.data()!;
+      final mutedBy = List<String>.from(chatData['mutedBy'] ?? []);
+
+      if (mutedBy.contains(currentUser.id)) {
+        // Sessize alınmışsa, sessize almayı kaldır
+        mutedBy.remove(currentUser.id);
+      } else {
+        // Sessize alınmamışsa, sessize al
+        mutedBy.add(currentUser.id);
+      }
+
+      await _firestore.collection(_collection).doc(chatId).update({
+        'mutedBy': mutedBy,
+      });
+    } catch (e) {
+      print('Sohbet sessize alma hatası: $e');
+      rethrow;
+    }
   }
 } 

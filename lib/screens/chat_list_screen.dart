@@ -348,97 +348,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       horizontal: 8,
                       vertical: 4,
                     ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      leading: CircleAvatar(
-                        radius: 28,
-                        backgroundColor: chat.isGroup ? Colors.blue : Colors.purple,
-                        child: chat.avatar != null
-                            ? ClipOval(
-                                child: Image.network(
-                                  chat.avatar!,
-                                  width: 56,
-                                  height: 56,
-                                  fit: BoxFit.cover,
-                                ),
-                              )
-                            : Icon(
-                                chat.isGroup ? Icons.group : Icons.person,
-                                color: Colors.white,
-                                size: 28,
-                              ),
-                      ),
-                      title: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  chat.name,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                if (chat.isGroup && chat.participants.isNotEmpty)
-                                  Text(
-                                    '${chat.participants.length} katılımcı',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          if (chat.lastMessageTime != null)
-                            Text(
-                              _formatTime(chat.lastMessageTime!),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                        ],
-                      ),
-                      subtitle: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              chat.lastMessage ?? 'Henüz mesaj yok',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 14,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (chat.unreadCount > 0)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.blue,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                chat.unreadCount.toString(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                    child: InkWell(
                       onTap: () {
                         Navigator.push(
                           context,
@@ -449,6 +359,268 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           ),
                         );
                       },
+                      onLongPress: () {
+                        showModalBottomSheet(
+                          context: context,
+                          builder: (context) => Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ListTile(
+                                leading: const Icon(Icons.notifications_off),
+                                title: const Text('Sessize Al'),
+                                onTap: () async {
+                                  try {
+                                    await chatService.toggleMuteChat(chat.id);
+                                    if (mounted) {
+                                      Navigator.pop(context);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Sohbet sessize alındı'),
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (mounted) {
+                                      Navigator.pop(context);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Hata: $e'),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                              ),
+                              ListTile(
+                                leading: const Icon(Icons.delete, color: Colors.red),
+                                title: const Text('Sohbeti Sil', style: TextStyle(color: Colors.red)),
+                                onTap: () async {
+                                  Navigator.pop(context);
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: const Text('Sohbeti Sil'),
+                                      content: const Text('Bu sohbeti silmek istediğinize emin misiniz? Bu işlem geri alınamaz.'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(context, false),
+                                          child: const Text('İptal'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(context, true),
+                                          child: const Text('Sil', style: TextStyle(color: Colors.red)),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+
+                                  if (confirm == true && mounted) {
+                                    try {
+                                      await chatService.deleteChat(chat.id);
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Sohbet silindi'),
+                                          ),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Hata: $e'),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        leading: CircleAvatar(
+                          radius: 28,
+                          backgroundColor: chat.isGroup ? Colors.blue : Colors.purple,
+                          child: chat.avatar != null
+                              ? ClipOval(
+                                  child: Image.network(
+                                    chat.avatar!,
+                                    width: 56,
+                                    height: 56,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : Icon(
+                                  chat.isGroup ? Icons.group : Icons.person,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.more_vert),
+                          onPressed: () {
+                            showModalBottomSheet(
+                              context: context,
+                              builder: (context) => Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ListTile(
+                                    leading: const Icon(Icons.notifications_off),
+                                    title: const Text('Sessize Al'),
+                                    onTap: () async {
+                                      try {
+                                        await chatService.toggleMuteChat(chat.id);
+                                        if (mounted) {
+                                          Navigator.pop(context);
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Sohbet sessize alındı'),
+                                            ),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (mounted) {
+                                          Navigator.pop(context);
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Hata: $e'),
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                                  ),
+                                  ListTile(
+                                    leading: const Icon(Icons.delete, color: Colors.red),
+                                    title: const Text('Sohbeti Sil', style: TextStyle(color: Colors.red)),
+                                    onTap: () async {
+                                      Navigator.pop(context);
+                                      final confirm = await showDialog<bool>(
+                                        context: context,
+                                        builder: (context) => AlertDialog(
+                                          title: const Text('Sohbeti Sil'),
+                                          content: const Text('Bu sohbeti silmek istediğinize emin misiniz? Bu işlem geri alınamaz.'),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(context, false),
+                                              child: const Text('İptal'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(context, true),
+                                              child: const Text('Sil', style: TextStyle(color: Colors.red)),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+
+                                      if (confirm == true && mounted) {
+                                        try {
+                                          await chatService.deleteChat(chat.id);
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('Sohbet silindi'),
+                                              ),
+                                            );
+                                          }
+                                        } catch (e) {
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('Hata: $e'),
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    chat.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  if (chat.isGroup && chat.participants.isNotEmpty)
+                                    Text(
+                                      '${chat.participants.length} katılımcı',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            if (chat.lastMessageTime != null)
+                              Text(
+                                _formatTime(chat.lastMessageTime!),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                          ],
+                        ),
+                        subtitle: Row(
+                          children: [
+                            if (chat.isMuted)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 4),
+                                child: Icon(Icons.notifications_off, size: 16, color: Colors.grey),
+                              ),
+                            Expanded(
+                              child: Text(
+                                chat.lastMessage ?? 'Henüz mesaj yok',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 14,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (chat.unreadCount > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  chat.unreadCount.toString(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
                   );
                 },

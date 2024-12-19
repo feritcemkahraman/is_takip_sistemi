@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'message_model.dart';
+import '../services/user_service.dart';
 
 class ChatModel {
   final String id;
@@ -14,6 +14,10 @@ class ChatModel {
   final bool isGroup;
   final String? avatar;
   final String? description;
+  final List<String> mutedBy;
+  final UserService _userService;
+
+  bool get isMuted => mutedBy.contains(_userService.currentUser?.id);
 
   ChatModel({
     required this.id,
@@ -22,13 +26,15 @@ class ChatModel {
     required this.createdBy,
     required this.createdAt,
     required this.updatedAt,
+    required UserService userService,
     this.lastMessage,
     this.lastMessageTime,
     this.unreadCount = 0,
     this.isGroup = false,
     this.avatar,
     this.description,
-  });
+    this.mutedBy = const [],
+  }) : _userService = userService;
 
   Map<String, dynamic> toMap() {
     return {
@@ -44,11 +50,11 @@ class ChatModel {
       'isGroup': isGroup,
       'avatar': avatar,
       'description': description,
+      'mutedBy': mutedBy,
     };
   }
 
-  factory ChatModel.fromMap(Map<String, dynamic> map) {
-    print('Creating ChatModel from map: $map');
+  factory ChatModel.fromMap(Map<String, dynamic> map, {required UserService userService}) {
     return ChatModel(
       id: map['id'] ?? '',
       name: map['name'] ?? '',
@@ -68,6 +74,8 @@ class ChatModel {
       isGroup: map['isGroup'] ?? false,
       avatar: map['avatar'],
       description: map['description'],
+      mutedBy: List<String>.from(map['mutedBy'] ?? []),
+      userService: userService,
     );
   }
 } 
