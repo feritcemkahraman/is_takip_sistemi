@@ -4,6 +4,7 @@ import '../models/chat_model.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
 import '../services/user_service.dart';
+import '../widgets/user_search_delegate.dart';
 import 'chat_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
@@ -39,6 +40,20 @@ class _ChatListScreenState extends State<ChatListScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Yeni Sohbet'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.search),
+              onPressed: () {
+                showSearch(
+                  context: context,
+                  delegate: UserSearchDelegate(
+                    userService: context.read<UserService>(),
+                    chatService: context.read<ChatService>(),
+                  ),
+                );
+              },
+            ),
+          ],
           content: SizedBox(
             width: double.maxFinite,
             child: ListView.builder(
@@ -51,7 +66,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     child: Text(user.name[0].toUpperCase()),
                   ),
                   title: Text(user.name),
-                  subtitle: Text(user.email),
+                  subtitle: Text(user.department),
                   onTap: () => Navigator.of(context).pop(user),
                 );
               },
@@ -153,7 +168,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                 });
                               },
                               title: Text(user.name),
-                              subtitle: Text(user.email),
+                              subtitle: Text(user.department),
                               secondary: CircleAvatar(
                                 child: Text(user.name[0].toUpperCase()),
                               ),
@@ -247,8 +262,20 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mesajlar'),
+        title: const Text('Yeni Sohbet'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              showSearch(
+                context: context,
+                delegate: UserSearchDelegate(
+                  userService: context.read<UserService>(),
+                  chatService: context.read<ChatService>(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () {

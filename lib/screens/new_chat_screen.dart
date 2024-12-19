@@ -5,6 +5,7 @@ import '../models/chat_model.dart';
 import '../services/user_service.dart';
 import '../services/chat_service.dart';
 import '../widgets/user_list_tile.dart';
+import '../widgets/user_search_delegate.dart';
 import 'chat_detail_screen.dart';
 
 class NewChatScreen extends StatefulWidget {
@@ -70,15 +71,14 @@ class _NewChatScreenState extends State<NewChatScreen> {
     try {
       setState(() => _isLoading = true);
       final currentUser = await _chatService.getCurrentUser();
+      if (currentUser == null) {
+        throw Exception('Kullanıcı oturumu bulunamadı');
+      }
 
       // Yeni sohbet oluştur
-      final chat = ChatModel(
-        id: '',
+      final chat = await _chatService.createChat(
         name: user.name,
-        participants: [currentUser.id, user.id],
-        createdBy: currentUser.id,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
+        participants: [user.id],
       );
 
       // Sohbet detay ekranına git
@@ -110,6 +110,23 @@ class _NewChatScreenState extends State<NewChatScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Yeni Sohbet'),
+        actions: [
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              showSearch(
+                context: context,
+                delegate: UserSearchDelegate(
+                  userService: context.read<UserService>(),
+                  chatService: context.read<ChatService>(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 16),
+        ],
       ),
       body: Column(
         children: [

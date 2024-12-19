@@ -53,43 +53,41 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     }
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickAndSendFile() async {
     try {
-      final picker = ImagePicker();
-      final image = await picker.pickImage(source: ImageSource.gallery);
-      if (image != null) {
-        if (!mounted) return;
+      final result = await FilePicker.platform.pickFiles();
+      if (result != null) {
+        final file = File(result.files.single.path!);
         await _chatService.sendFileMessage(
-          widget.chat.id,
-          image.path,
-          'image',
+          chatId: widget.chat.id,
+          filePath: file.path,
+          fileName: result.files.single.name,
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Resim gönderilemedi: $e')),
+          SnackBar(content: Text('Dosya gönderilirken hata oluştu: $e')),
         );
       }
     }
   }
 
-  Future<void> _pickFile() async {
+  Future<void> _pickAndSendImage() async {
     try {
-      final result = await FilePicker.platform.pickFiles();
-      if (result != null) {
-        final file = File(result.files.single.path!);
-        if (!mounted) return;
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
         await _chatService.sendFileMessage(
-          widget.chat.id,
-          file.path,
-          'file',
+          chatId: widget.chat.id,
+          filePath: pickedFile.path,
+          fileName: 'image_${DateTime.now().millisecondsSinceEpoch}.jpg',
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Dosya gönderilemedi: $e')),
+          SnackBar(content: Text('Resim gönderilirken hata oluştu: $e')),
         );
       }
     }
@@ -144,9 +142,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
 
     try {
       await _chatService.sendMessage(
-        widget.chat.id,
-        message,
-        'text',
+        chatId: widget.chat.id,
+        content: message,
       );
       _messageController.clear();
     } catch (e) {
@@ -248,11 +245,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.attach_file),
-                          onPressed: _pickFile,
+                          onPressed: _pickAndSendFile,
                         ),
                         IconButton(
                           icon: const Icon(Icons.image),
-                          onPressed: _pickImage,
+                          onPressed: _pickAndSendImage,
                         ),
                         Expanded(
                           child: TextField(

@@ -11,10 +11,10 @@ class MessageModel {
   final String chatId;
   final String senderId;
   final String content;
-  final String type;
+  final String? attachment;
   final DateTime createdAt;
   final bool isRead;
-  final String? attachment;
+  final String type;
   final bool isDeleted;
   final bool isSystemMessage;
 
@@ -23,13 +23,28 @@ class MessageModel {
     required this.chatId,
     required this.senderId,
     required this.content,
-    required this.type,
+    this.attachment,
     required this.createdAt,
     this.isRead = false,
-    this.attachment,
+    this.type = 'text',
     this.isDeleted = false,
     this.isSystemMessage = false,
   });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'chatId': chatId,
+      'senderId': senderId,
+      'content': content,
+      'attachment': attachment,
+      'createdAt': createdAt,
+      'isRead': isRead,
+      'type': type,
+      'isDeleted': isDeleted,
+      'isSystemMessage': isSystemMessage,
+    };
+  }
 
   factory MessageModel.fromMap(Map<String, dynamic> map) {
     return MessageModel(
@@ -37,14 +52,10 @@ class MessageModel {
       chatId: map['chatId'] ?? '',
       senderId: map['senderId'] ?? '',
       content: map['content'] ?? '',
-      type: map['type'] ?? typeText,
-      createdAt: map['createdAt'] != null
-          ? (map['createdAt'] is Timestamp 
-              ? (map['createdAt'] as Timestamp).toDate()
-              : DateTime.parse(map['createdAt']))
-          : DateTime.now(),
-      isRead: map['isRead'] ?? false,
       attachment: map['attachment'],
+      createdAt: (map['createdAt'] as Timestamp).toDate(),
+      isRead: map['isRead'] ?? false,
+      type: map['type'] ?? 'text',
       isDeleted: map['isDeleted'] ?? false,
       isSystemMessage: map['isSystemMessage'] ?? false,
     );
@@ -64,19 +75,5 @@ class MessageModel {
       isDeleted: data['isDeleted'] ?? false,
       isSystemMessage: data['isSystemMessage'] ?? false,
     );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'chatId': chatId,
-      'senderId': senderId,
-      'content': content,
-      'type': type,
-      'createdAt': createdAt.toIso8601String(),
-      'isRead': isRead,
-      'attachment': attachment,
-      'isDeleted': isDeleted,
-      'isSystemMessage': isSystemMessage,
-    };
   }
 } 

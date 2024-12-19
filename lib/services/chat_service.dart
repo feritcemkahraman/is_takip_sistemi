@@ -54,11 +54,13 @@ class ChatService extends ChangeNotifier {
         }
       }
 
+      final now = DateTime.now();
       final chatData = {
         'name': name,
         'participants': [...participants, currentUser.id],
         'createdBy': currentUser.id,
         'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
         'lastMessage': null,
         'lastMessageTime': null,
         'isGroup': isGroup,
@@ -72,7 +74,8 @@ class ChatService extends ChangeNotifier {
         name: name,
         participants: [...participants, currentUser.id],
         createdBy: currentUser.id,
-        createdAt: DateTime.now(),
+        createdAt: now,
+        updatedAt: now,
         lastMessage: null,
         lastMessageTime: null,
         isGroup: isGroup,
@@ -87,43 +90,82 @@ class ChatService extends ChangeNotifier {
   Future<void> sendMessage({
     required String chatId,
     required String content,
-    File? attachment,
+    String? attachment,
   }) async {
     try {
       final currentUser = _userService.currentUser;
-      if (currentUser == null) {
-        throw Exception('Oturum açmış kullanıcı bulunamadı');
-      }
+      if (currentUser == null) throw Exception('Kullanıcı oturumu bulunamadı');
 
-      String? attachmentUrl;
-      if (attachment != null) {
-        final ref = _storage.ref().child('chat_attachments/${DateTime.now().millisecondsSinceEpoch}_${attachment.path.split('/').last}');
-        await ref.putFile(attachment);
-        attachmentUrl = await ref.getDownloadURL();
-      }
-
-      final messageData = {
-        'content': content,
-        'senderId': currentUser.id,
-        'timestamp': FieldValue.serverTimestamp(),
-        'attachment': attachmentUrl,
-        'isRead': false,
-        'type': attachment != null ? 'file' : 'text',
-      };
+      final message = MessageModel(
+        id: '',
+        chatId: chatId,
+        senderId: currentUser.id,
+        content: content,
+        attachment: attachment,
+        createdAt: DateTime.now(),
+        type: attachment != null ? 'file' : 'text',
+      );
 
       await _firestore
           .collection(_collection)
           .doc(chatId)
           .collection(_messagesCollection)
-          .add(messageData);
+          .add(message.toMap());
 
       await _firestore.collection(_collection).doc(chatId).update({
         'lastMessage': content,
         'lastMessageTime': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      print('Mesaj gönderme hatası: $e');
-      rethrow;
+      throw Exception('Mesaj gönderilemedi: $e');
+    }
+  }
+
+  Future<void> sendFileMessage({
+    required String chatId,
+    required String filePath,
+    required String fileName,
+  }) async {
+    try {
+      final currentUser = _userService.currentUser;
+      if (currentUser == null) throw Exception('Kullanıcı oturumu bulunamadı');
+
+      // Dosyayı yükle ve URL'sini al
+      final fileUrl = await _uploadFile(filePath, fileName);
+
+      // Mesajı gönder
+      await sendMessage(
+        chatId: chatId,
+        content: fileName,
+        attachment: fileUrl,
+      );
+    } catch (e) {
+      throw Exception('Dosya gönderilemedi: $e');
+    }
+  }
+
+  Future<void> deleteMessage(String chatId, String messageId) async {
+    try {
+      await _firestore
+          .collection('chats')
+          .doc(chatId)
+          .collection('messages')
+          .doc(messageId)
+          .delete();
+    } catch (e) {
+      throw Exception('Mesaj silinemedi: $e');
+    }
+  }
+
+  Future<String> _uploadFile(String filePath, String fileName) async {
+    try {
+      final ref = FirebaseStorage.instance.ref().child('chat_files/$fileName');
+      final file = File(filePath);
+      await ref.putFile(file);
+      return await ref.getDownloadURL();
+    } catch (e) {
+      throw Exception('Dosya yüklenemedi: $e');
     }
   }
 
@@ -136,7 +178,6 @@ class ChatService extends ChangeNotifier {
     return _firestore
         .collection(_collection)
         .where('participants', arrayContains: currentUser.id)
-        .orderBy('lastMessageTime', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => ChatModel.fromMap({...doc.data(), 'id': doc.id}))
@@ -148,10 +189,10 @@ class ChatService extends ChangeNotifier {
         .collection(_collection)
         .doc(chatId)
         .collection(_messagesCollection)
-        .orderBy('timestamp', descending: true)
+        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => MessageModel.fromMap({...doc.data(), 'id': doc.id}))
+            .map((doc) => MessageModel.fromFirestore(doc))
             .toList());
   }
 
@@ -291,7 +332,6 @@ class ChatService extends ChangeNotifier {
     return _firestore
         .collection(_collection)
         .where('participants', arrayContains: currentUser.id)
-        .orderBy('lastMessageTime', descending: true)
         .snapshots()
         .asyncMap((snapshot) async {
       List<ChatModel> chats = [];
@@ -311,18 +351,28 @@ class ChatService extends ChangeNotifier {
             .count()
             .get();
 
-        chats.add(ChatModel(
-          id: doc.id,
-          name: data['name'] ?? '',
-          participants: List<String>.from(data['participants']),
-          lastMessage: data['lastMessage'],
-          lastMessageTime: (data['lastMessageTime'] as Timestamp?)?.toDate(),
-          unreadCount: unreadCount.count ?? 0,
-          isGroup: data['isGroup'] ?? false,
-          createdBy: data['createdBy'] ?? '',
-          createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-        ));
+        final chatData = {
+          'id': doc.id,
+          'name': data['name'] ?? '',
+          'participants': data['participants'] ?? [],
+          'createdBy': data['createdBy'] ?? '',
+          'createdAt': data['createdAt'] ?? Timestamp.now(),
+          'updatedAt': data['updatedAt'] ?? Timestamp.now(),
+          'lastMessage': data['lastMessage'],
+          'lastMessageTime': data['lastMessageTime'],
+          'unreadCount': unreadCount.count ?? 0,
+          'isGroup': data['isGroup'] ?? false,
+        };
+
+        chats.add(ChatModel.fromMap(chatData));
       }
+
+      // Sohbetleri son mesaj zamanına göre sırala
+      chats.sort((a, b) {
+        if (a.lastMessageTime == null) return 1;
+        if (b.lastMessageTime == null) return -1;
+        return b.lastMessageTime!.compareTo(a.lastMessageTime!);
+      });
 
       return chats;
     });
