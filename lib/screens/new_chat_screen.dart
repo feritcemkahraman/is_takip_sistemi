@@ -75,27 +75,54 @@ class _NewChatScreenState extends State<NewChatScreen> {
         throw Exception('Kullanıcı oturumu bulunamadı');
       }
 
-      // Yeni sohbet oluştur
+      // Mevcut sohbetleri getir
+      final existingChats = await _chatService.getChats().first;
+      
+      // Birebir sohbetleri filtrele
+      final existingChat = existingChats.where((chat) => 
+        !chat.isGroup && // Grup sohbeti olmamalı
+        chat.participants.length == 2 && // İki kişilik olmalı
+        chat.participants.contains(currentUser.id) && // Mevcut kullanıcı olmalı
+        chat.participants.contains(user.id) // Seçilen kullanıcı olmalı
+      ).firstOrNull;
+
+      if (existingChat != null) {
+        // Mevcut sohbete yönlendir
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatDetailScreen(chat: existingChat),
+            ),
+          );
+        }
+        return;
+      }
+
+      // Mevcut sohbet yoksa yeni sohbet oluştur
       final chat = await _chatService.createChat(
         name: user.name,
         participants: [user.id],
       );
 
-      // Sohbet detay ekranına git
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ChatDetailScreen(chat: chat),
-        ),
-      );
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatDetailScreen(chat: chat),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Sohbet başlatılırken hata: $e')),
         );
       }
-      setState(() => _isLoading = false);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
