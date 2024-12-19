@@ -18,15 +18,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
   bool _isLoading = false;
 
   Future<void> _showNewChatDialog(BuildContext context) async {
-    final userService = context.read<UserService>();
-    final chatService = context.read<ChatService>();
-    final currentUser = userService.currentUser;
-
-    if (currentUser == null) return;
-
-    setState(() => _isLoading = true);
-
     try {
+      final userService = context.read<UserService>();
+      final chatService = context.read<ChatService>();
+      final currentUser = userService.currentUser;
+
+      if (currentUser == null) return;
+
+      setState(() => _isLoading = true);
+
       // Tüm kullanıcıları getir
       final users = await userService.getAllUsers();
       // Mevcut kullanıcıyı listeden çıkar
@@ -36,68 +36,70 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
       setState(() => _isLoading = false);
 
-      final selectedUser = await showDialog<UserModel>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Yeni Sohbet'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.search),
-              onPressed: () {
-                showSearch(
-                  context: context,
-                  delegate: UserSearchDelegate(
-                    userService: context.read<UserService>(),
-                    chatService: context.read<ChatService>(),
-                  ),
-                );
-              },
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => Scaffold(
+            appBar: AppBar(
+              title: const Text('Yeni Sohbet'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () {
+                    showSearch(
+                      context: context,
+                      delegate: UserSearchDelegate(
+                        userService: userService,
+                        chatService: chatService,
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
-          ],
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
+            body: ListView.builder(
               itemCount: users.length,
               itemBuilder: (context, index) {
                 final user = users[index];
                 return ListTile(
                   leading: CircleAvatar(
+                    backgroundColor: Colors.purple,
                     child: Text(user.name[0].toUpperCase()),
                   ),
                   title: Text(user.name),
                   subtitle: Text(user.department),
-                  onTap: () => Navigator.of(context).pop(user),
+                  onTap: () async {
+                    try {
+                      // Yeni sohbet oluştur
+                      final chat = await chatService.createChat(
+                        name: user.name,
+                        participants: [user.id],
+                      );
+
+                      if (context.mounted) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ChatDetailScreen(
+                              chat: chat,
+                            ),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Hata: $e')),
+                        );
+                      }
+                    }
+                  },
                 );
               },
             ),
           ),
         ),
       );
-
-      if (selectedUser != null && mounted) {
-        setState(() => _isLoading = true);
-
-        // Yeni sohbet oluştur
-        final chat = await chatService.createChat(
-          name: selectedUser.name,
-          participants: [selectedUser.id],
-        );
-
-        if (mounted) {
-          setState(() => _isLoading = false);
-
-          // Yeni sohbet ekranına git
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ChatDetailScreen(
-                chat: chat,
-              ),
-            ),
-          );
-        }
-      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);

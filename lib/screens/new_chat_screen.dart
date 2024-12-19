@@ -109,65 +109,35 @@ class _NewChatScreenState extends State<NewChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Yeni Sohbet'),
-        centerTitle: false,
-        actions: [
-          IconButton(
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              showSearch(
-                context: context,
-                delegate: UserSearchDelegate(
-                  userService: context.read<UserService>(),
-                  chatService: context.read<ChatService>(),
-                ),
-              );
-            },
+        title: TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: 'Kullanıcı ara...',
+            border: InputBorder.none,
+            hintStyle: TextStyle(color: Colors.grey[200]),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _searchQuery = '');
+                      _loadUsers();
+                    },
+                  )
+                : null,
           ),
-          const SizedBox(width: 16),
-        ],
+          onChanged: (value) {
+            setState(() => _searchQuery = value);
+            if (value.length >= 3) {
+              _searchUsers(value);
+            } else if (value.isEmpty) {
+              _loadUsers();
+            }
+          },
+        ),
       ),
       body: Column(
         children: [
-          // Arama Alanı
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Kullanıcı ara...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                          _loadUsers();
-                        },
-                      )
-                    : null,
-              ),
-              onChanged: (value) {
-                setState(() => _searchQuery = value);
-                if (value.length >= 3) {
-                  _searchUsers(value);
-                } else if (value.isEmpty) {
-                  _loadUsers();
-                }
-              },
-            ),
-          ),
-
           // Kullanıcı Listesi
           Expanded(
             child: _isLoading
