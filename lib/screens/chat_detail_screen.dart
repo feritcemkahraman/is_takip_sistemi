@@ -166,13 +166,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           children: [
             Text(widget.chat.name),
             if (widget.chat.isGroup)
-              FutureBuilder<List<UserModel>>(
-                future: Future.wait(
-                  widget.chat.participants.map((id) => _userService.getUserById(id))
-                ),
+              StreamBuilder<List<UserModel>>(
+                stream: _chatService.getChatParticipants(widget.chat.id),
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) return const SizedBox.shrink();
-                  final participants = snapshot.data!.whereType<UserModel>().toList();
+                  final participants = snapshot.data!;
                   return Text(
                     '${participants.length} katılımcı',
                     style: const TextStyle(
@@ -191,16 +189,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               onPressed: () {
                 showModalBottomSheet(
                   context: context,
-                  builder: (context) => FutureBuilder<List<UserModel>>(
-                    future: Future.wait(
-                      widget.chat.participants.map((id) => _userService.getUserById(id))
-                    ),
+                  builder: (context) => StreamBuilder<List<UserModel>>(
+                    stream: _chatService.getChatParticipants(widget.chat.id),
                     builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const Center(child: CircularProgressIndicator());
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Text('Hata: ${snapshot.error}'),
+                        );
                       }
-                      
-                      final participants = snapshot.data!.whereType<UserModel>().toList();
+
+                      final participants = snapshot.data ?? [];
                       
                       return Container(
                         padding: const EdgeInsets.all(16),
@@ -225,24 +223,45 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                               ],
                             ),
                             const Divider(),
-                            Expanded(
-                              child: ListView.builder(
-                                shrinkWrap: true,
-                                itemCount: participants.length,
-                                itemBuilder: (context, index) {
-                                  final user = participants[index];
-                                  return ListTile(
-                                    leading: CircleAvatar(
-                                      child: Text(user.name[0].toUpperCase()),
-                                    ),
-                                    title: Text(user.name),
-                                    subtitle: user.id == widget.chat.createdBy
-                                        ? const Text('Grup Yöneticisi')
-                                        : null,
-                                  );
-                                },
+                            if (participants.isEmpty)
+                              const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(16.0),
+                                  child: CircularProgressIndicator(),
+                                ),
+                              )
+                            else
+                              Expanded(
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  itemCount: participants.length,
+                                  itemBuilder: (context, index) {
+                                    final user = participants[index];
+                                    return ListTile(
+                                      leading: CircleAvatar(
+                                        backgroundColor: Colors.blue,
+                                        child: Text(
+                                          user.name[0].toUpperCase(),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      title: Text(user.name),
+                                      subtitle: user.id == widget.chat.createdBy
+                                          ? const Text(
+                                              'Grup Yöneticisi',
+                                              style: TextStyle(
+                                                color: Colors.blue,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            )
+                                          : null,
+                                    );
+                                  },
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       );
@@ -268,35 +287,36 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       body: Column(
         children: [
           Expanded(
-            child: StreamBuilder<List<MessageModel>>(
-              stream: _chatService.getChatMessages(widget.chat.id),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text('Hata: ${snapshot.error}'),
-                  );
-                }
+            child: StreamBuilder<List<UserModel>>(
+              stream: _chatService.getChatParticipants(widget.chat.id),
+              builder: (context, participantsSnapshot) {
+                final participantMap = participantsSnapshot.data?.fold<Map<String, String>>(
+                  {},
+                  (map, user) => map..[user.id] = user.name,
+                ) ?? {};
 
-                if (!snapshot.hasData) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                }
-
-                final messages = snapshot.data!;
-                return FutureBuilder<List<UserModel>>(
-                  future: Future.wait(
-                    widget.chat.participants.map((id) => _userService.getUserById(id))
-                  ),
-                  builder: (context, participantsSnapshot) {
-                    if (!participantsSnapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
+                return StreamBuilder<List<MessageModel>>(
+                  stream: _chatService.getChatMessages(widget.chat.id),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text('Hata: ${snapshot.error}'),
+                      );
                     }
 
-                    final participants = participantsSnapshot.data!.whereType<UserModel>().toList();
-                    final participantMap = {
-                      for (var p in participants) p.id: p.name
-                    };
+                    if (!snapshot.hasData) {
+                      return const Center(
+                        child: CircularProgressIndicator(),
+                      );
+                    }
+
+                    final messages = snapshot.data!;
+                    
+                    if (messages.isEmpty) {
+                      return const Center(
+                        child: Text('Henüz mesaj yok'),
+                      );
+                    }
 
                     return ListView.builder(
                       controller: _scrollController,

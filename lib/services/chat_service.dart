@@ -165,11 +165,26 @@ class ChatService extends ChangeNotifier {
 
   Future<String> _uploadFile(String filePath, String fileName) async {
     try {
-      final ref = FirebaseStorage.instance.ref().child('chat_files/$fileName');
+      // Benzersiz bir dosya adı oluştur
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final uniqueFileName = '${timestamp}_$fileName';
+      
+      // Storage referansını oluştur
+      final ref = _storage.ref().child('chat_files').child(uniqueFileName);
+      
+      // Dosyayı yükle
       final file = File(filePath);
-      await ref.putFile(file);
-      return await ref.getDownloadURL();
+      final uploadTask = await ref.putFile(file);
+      
+      if (uploadTask.state == TaskState.success) {
+        // Dosya URL'sini al
+        final downloadUrl = await ref.getDownloadURL();
+        return downloadUrl;
+      } else {
+        throw Exception('Dosya yükleme başarısız oldu');
+      }
     } catch (e) {
+      print('Dosya yükleme hatası: $e');
       throw Exception('Dosya yüklenemedi: $e');
     }
   }
@@ -214,22 +229,49 @@ class ChatService extends ChangeNotifier {
 
   Stream<List<UserModel>> getChatParticipants(String chatId) {
     try {
+      if (chatId.isEmpty) {
+        print('Chat ID boş olamaz');
+        return Stream.value([]);
+      }
+
       return _firestore
           .collection(_collection)
           .doc(chatId)
           .snapshots()
           .asyncMap((chatDoc) async {
-            if (!chatDoc.exists) return [];
+            if (!chatDoc.exists) {
+              print('Sohbet bulunamadı: $chatId');
+              return [];
+            }
             
-            final participants = List<String>.from(chatDoc.data()!['participants']);
-            final userModels = await Future.wait(
-              participants.map((userId) => _userService.getUserById(userId))
-            );
-            
-            return userModels.whereType<UserModel>().toList();
+            final data = chatDoc.data();
+            if (data == null) {
+              print('Sohbet verisi boş: $chatId');
+              return [];
+            }
+
+            final participants = List<String>.from(data['participants'] ?? []);
+            if (participants.isEmpty) {
+              print('Katılımcı listesi boş: $chatId');
+              return [];
+            }
+
+            try {
+              final userModels = await Future.wait(
+                participants.map((userId) async {
+                  final user = await _userService.getUserById(userId);
+                  return user;
+                })
+              );
+              
+              return userModels.whereType<UserModel>().toList();
+            } catch (e) {
+              print('Katılımcı bilgileri alınırken hata: $e');
+              return [];
+            }
           });
     } catch (e) {
-      print('Katılımcıları getirirken hata: $e');
+      print('getChatParticipants hatası: $e');
       return Stream.value([]);
     }
   }

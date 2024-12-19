@@ -31,42 +31,61 @@ class UserService extends ChangeNotifier {
     }
   }
 
-  Future<UserModel> getUserById(String userId) async {
+  Future<UserModel?> getUserById(String userId) async {
     try {
-      final doc = await _firestore.collection(_collection).doc(userId).get();
-      if (!doc.exists) {
-        throw Exception('Kullanıcı bulunamadı');
+      if (userId.isEmpty) {
+        print('Kullanıcı ID boş olamaz');
+        return null;
       }
-      return UserModel.fromMap(doc.data()!..['id'] = doc.id);
+
+      final doc = await _firestore.collection(_collection).doc(userId).get();
+      
+      if (!doc.exists) {
+        print('Kullanıcı bulunamadı: $userId');
+        return null;
+      }
+
+      final data = doc.data();
+      if (data == null) {
+        print('Kullanıcı verisi boş: $userId');
+        return null;
+      }
+
+      return UserModel.fromMap({...data, 'id': doc.id});
     } catch (e) {
-      throw Exception('Kullanıcı bilgileri alınamadı: $e');
+      print('Kullanıcı bilgileri alınamadı: $e');
+      return null;
     }
   }
 
   Future<List<UserModel>> getAllUsers() async {
     try {
-      final querySnapshot = await _firestore.collection('users').get();
-      return querySnapshot.docs
-          .map((doc) => UserModel.fromMap(doc.data() as Map<String, dynamic>))
-          .toList();
+      final querySnapshot = await _firestore.collection(_collection).get();
+      return querySnapshot.docs.map((doc) {
+        final data = doc.data();
+        return UserModel.fromMap({...data, 'id': doc.id});
+      }).toList();
     } catch (e) {
-      throw Exception('Kullanıcılar alınırken hata oluştu: $e');
+      print('Kullanıcılar alınırken hata oluştu: $e');
+      return [];
     }
   }
 
   Future<List<UserModel>> searchUsers(String query) async {
     try {
       final querySnapshot = await _firestore
-          .collection('users')
+          .collection(_collection)
           .where('name', isGreaterThanOrEqualTo: query)
           .where('name', isLessThanOrEqualTo: query + '\uf8ff')
           .get();
 
-      return querySnapshot.docs
-          .map((doc) => UserModel.fromMap(doc.data() as Map<String, dynamic>))
-          .toList();
+      return querySnapshot.docs.map((doc) {
+        final data = doc.data();
+        return UserModel.fromMap({...data, 'id': doc.id});
+      }).toList();
     } catch (e) {
-      throw Exception('Kullanıcı araması yapılırken hata oluştu: $e');
+      print('Kullanıcı araması yapılırken hata oluştu: $e');
+      return [];
     }
   }
 
