@@ -52,6 +52,24 @@ class _ChatInfoScreenState extends State<ChatInfoScreen> {
     }
   }
 
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final date = DateTime(dateTime.year, dateTime.month, dateTime.day);
+
+    String formattedDate;
+    if (date == today) {
+      formattedDate = 'Bugün';
+    } else if (date == today.subtract(const Duration(days: 1))) {
+      formattedDate = 'Dün';
+    } else {
+      formattedDate = '${dateTime.day.toString().padLeft(2, '0')}.${dateTime.month.toString().padLeft(2, '0')}.${dateTime.year}';
+    }
+
+    final formattedTime = '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    return '$formattedDate $formattedTime';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -80,7 +98,18 @@ class _ChatInfoScreenState extends State<ChatInfoScreen> {
                         const SizedBox(height: 16),
                         Text(
                           widget.chat.name,
-                          style: Theme.of(context).textTheme.titleLarge,
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Oluşturulma: ${_formatDateTime(widget.chat.createdAt)}',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                          ),
                         ),
                         if (widget.chat.description != null) ...[
                           const SizedBox(height: 8),
@@ -89,11 +118,6 @@ class _ChatInfoScreenState extends State<ChatInfoScreen> {
                             style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ],
-                        const SizedBox(height: 8),
-                        Text(
-                          'Oluşturulma: ${widget.chat.createdAt.toLocal()}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
                       ],
                     ),
                   ),
