@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart'; // ChangeNotifier için gerekli
 
 class UserService extends ChangeNotifier {
   final FirebaseFirestore _firestore;
+  final String _collection = 'users';
 
   UserService({FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
@@ -12,16 +13,14 @@ class UserService extends ChangeNotifier {
 
   UserModel? get currentUser => _currentUser;
 
-  // Mevcut kullanıcıyı ayarla
   void setCurrentUser(UserModel? user) {
     _currentUser = user;
     notifyListeners();
   }
 
-  // Mevcut kullanıcıyı Firebase Auth'dan al
   Future<void> loadCurrentUser(String userId) async {
     try {
-      final userDoc = await _firestore.collection('users').doc(userId).get();
+      final userDoc = await _firestore.collection(_collection).doc(userId).get();
       if (userDoc.exists) {
         _currentUser = UserModel.fromMap(userDoc.data()!..['id'] = userDoc.id);
         notifyListeners();
@@ -34,7 +33,7 @@ class UserService extends ChangeNotifier {
 
   Future<UserModel> getUserById(String userId) async {
     try {
-      final doc = await _firestore.collection('users').doc(userId).get();
+      final doc = await _firestore.collection(_collection).doc(userId).get();
       if (!doc.exists) {
         throw Exception('Kullanıcı bulunamadı');
       }
@@ -47,7 +46,7 @@ class UserService extends ChangeNotifier {
   Future<List<UserModel>> getAllUsers() async {
     try {
       print('UserService.getAllUsers başladı');
-      final QuerySnapshot querySnapshot = await _firestore.collection('users').get();
+      final QuerySnapshot querySnapshot = await _firestore.collection(_collection).get();
       print('Firestore sorgusu tamamlandı. Döküman sayısı: ${querySnapshot.docs.length}');
 
       final users = querySnapshot.docs.map((doc) {
@@ -109,7 +108,7 @@ class UserService extends ChangeNotifier {
   Future<List<UserModel>> searchUsers(String query) async {
     try {
       final snapshot = await _firestore
-          .collection('users')
+          .collection(_collection)
           .where('name', isGreaterThanOrEqualTo: query)
           .where('name', isLessThan: query + 'z')
           .get();
@@ -122,47 +121,9 @@ class UserService extends ChangeNotifier {
     }
   }
 
-  Future<void> updateUser(String userId, Map<String, dynamic> data) async {
-    try {
-      await _firestore.collection('users').doc(userId).update(data);
-    } catch (e) {
-      throw Exception('Kullanıcı güncellenemedi: $e');
-    }
-  }
-
-  Future<void> updateUserAvatar(String userId, String avatarUrl) async {
-    try {
-      await _firestore.collection('users').doc(userId).update({
-        'avatar': avatarUrl,
-      });
-    } catch (e) {
-      throw Exception('Profil resmi güncellenemedi: $e');
-    }
-  }
-
-  Future<void> updateUserRole(String userId, String role) async {
-    try {
-      await _firestore.collection('users').doc(userId).update({
-        'role': role,
-      });
-    } catch (e) {
-      throw Exception('Kullanıcı rolü güncellenemedi: $e');
-    }
-  }
-
-  Future<void> updateUserDepartment(String userId, String departmentId) async {
-    try {
-      await _firestore.collection('users').doc(userId).update({
-        'departmentId': departmentId,
-      });
-    } catch (e) {
-      throw Exception('Kullanıcı departmanı güncellenemedi: $e');
-    }
-  }
-
   Future<void> deleteUser(String userId) async {
     try {
-      await _firestore.collection('users').doc(userId).delete();
+      await _firestore.collection(_collection).doc(userId).delete();
     } catch (e) {
       throw Exception('Kullanıcı silinemedi: $e');
     }

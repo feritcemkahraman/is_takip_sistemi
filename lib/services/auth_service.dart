@@ -319,31 +319,6 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<List<UserModel>> getAllUsers() async {
-    try {
-      final querySnapshot = await _firestore.collection(_collection).get();
-      return querySnapshot.docs
-          .map((doc) => UserModel.fromMap({
-                ...doc.data(),
-                'id': doc.id,
-              }))
-          .toList();
-    } catch (e) {
-      print('Kullanıcıları getirme hatası: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> deleteUser(String userId) async {
-    try {
-      await _firestore.collection(_collection).doc(userId).delete();
-      notifyListeners();
-    } catch (e) {
-      print('Kullanıcı silme hatası: $e');
-      rethrow;
-    }
-  }
-
   Future<UserModel> signInWithUsername(String username, String password) async {
     try {
       print('Giriş denemesi - Kullanıcı adı: $username');

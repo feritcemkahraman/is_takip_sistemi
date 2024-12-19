@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/task_service.dart';
+import '../../services/chat_service.dart';
 import '../../widgets/admin/user_activity_widget.dart';
 import '../../widgets/dashboard_card.dart';
+import '../chat_list_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({Key? key}) : super(key: key);
@@ -121,6 +123,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ],
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ChatListScreen(),
+            ),
+          );
+        },
+        child: const Icon(Icons.chat),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }
