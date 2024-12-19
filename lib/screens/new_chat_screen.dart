@@ -110,8 +110,11 @@ class _NewChatScreenState extends State<NewChatScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Yeni Sohbet'),
+        centerTitle: false,
         actions: [
           IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
             icon: const Icon(Icons.search),
             onPressed: () {
               showSearch(
@@ -123,7 +126,7 @@ class _NewChatScreenState extends State<NewChatScreen> {
               );
             },
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 16),
         ],
       ),
       body: Column(

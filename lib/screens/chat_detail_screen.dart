@@ -155,132 +155,62 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     }
   }
 
+  void _showGroupInfo() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatInfoScreen(chat: widget.chat),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     print('Chat isGroup: ${widget.chat.isGroup}');
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(widget.chat.name),
-            if (widget.chat.isGroup)
-              StreamBuilder<List<UserModel>>(
-                stream: _chatService.getChatParticipants(widget.chat.id),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) return const SizedBox.shrink();
-                  final participants = snapshot.data!;
-                  return Text(
-                    '${participants.length} katılımcı',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: Colors.white70,
-                    ),
-                  );
-                },
+        titleSpacing: 0,
+        title: InkWell(
+          onTap: widget.chat.isGroup ? _showGroupInfo : null,
+          child: Row(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: CircleAvatar(
+                  radius: 20,
+                  backgroundColor: widget.chat.isGroup ? Colors.blue : Colors.purple,
+                  child: widget.chat.avatar != null
+                      ? ClipOval(
+                          child: Image.network(
+                            widget.chat.avatar!,
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                      : Icon(
+                          widget.chat.isGroup ? Icons.group : Icons.person,
+                          color: Colors.white,
+                        ),
+                ),
               ),
-          ],
+              Expanded(
+                child: Text(
+                  widget.chat.name,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           if (widget.chat.isGroup)
             IconButton(
-              icon: const Icon(Icons.group),
-              onPressed: () {
-                showModalBottomSheet(
-                  context: context,
-                  builder: (context) => StreamBuilder<List<UserModel>>(
-                    stream: _chatService.getChatParticipants(widget.chat.id),
-                    builder: (context, snapshot) {
-                      if (snapshot.hasError) {
-                        return Center(
-                          child: Text('Hata: ${snapshot.error}'),
-                        );
-                      }
-
-                      final participants = snapshot.data ?? [];
-                      
-                      return Container(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Grup Katılımcıları (${participants.length})',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.close),
-                                  onPressed: () => Navigator.pop(context),
-                                ),
-                              ],
-                            ),
-                            const Divider(),
-                            if (participants.isEmpty)
-                              const Center(
-                                child: Padding(
-                                  padding: EdgeInsets.all(16.0),
-                                  child: CircularProgressIndicator(),
-                                ),
-                              )
-                            else
-                              Expanded(
-                                child: ListView.builder(
-                                  shrinkWrap: true,
-                                  itemCount: participants.length,
-                                  itemBuilder: (context, index) {
-                                    final user = participants[index];
-                                    return ListTile(
-                                      leading: CircleAvatar(
-                                        backgroundColor: Colors.blue,
-                                        child: Text(
-                                          user.name[0].toUpperCase(),
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                      title: Text(user.name),
-                                      subtitle: user.id == widget.chat.createdBy
-                                          ? const Text(
-                                              'Grup Yöneticisi',
-                                              style: TextStyle(
-                                                color: Colors.blue,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            )
-                                          : null,
-                                    );
-                                  },
-                                ),
-                              ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                );
-              },
-            )
-          else
-            IconButton(
               icon: const Icon(Icons.info_outline),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ChatInfoScreen(chat: widget.chat),
-                  ),
-                );
-              },
+              onPressed: _showGroupInfo,
             ),
         ],
       ),
