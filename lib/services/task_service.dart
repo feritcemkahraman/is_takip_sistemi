@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/task_model.dart';
+import '../models/comment_model.dart';
 import '../services/local_storage_service.dart';
 
 class TaskService with ChangeNotifier {
@@ -181,6 +182,93 @@ class TaskService with ChangeNotifier {
     } catch (e) {
       print('Error getting tasks by user: $e');
       return [];
+    }
+  }
+
+  // Göreve yorum ekle
+  Future<void> addComment(CommentModel comment) async {
+    try {
+      final taskRef = _firestore.collection('tasks').doc(comment.taskId);
+      final commentRef = taskRef.collection('comments').doc(comment.id);
+      
+      await commentRef.set({
+        ...comment.toMap(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Yorum eklenirken hata oluştu: $e');
+    }
+  }
+
+  // Göreve yorum ekle
+  Future<void> addCommentOld(String taskId, String text, String userId) async {
+    try {
+      await _firestore.collection(_collection).doc(taskId).collection('comments').add({
+        'text': text,
+        'userId': userId,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      notifyListeners();
+    } catch (e) {
+      print('Error adding comment: $e');
+      throw e;
+    }
+  }
+
+  // Göreve dosya ekle
+  Future<void> addAttachment(String taskId, String filePath) async {
+    try {
+      final taskRef = _firestore.collection('tasks').doc(taskId);
+      final task = await taskRef.get();
+      
+      if (!task.exists) {
+        throw Exception('Görev bulunamadı');
+      }
+
+      final currentAttachments = List<String>.from(task.data()?['attachments'] ?? []);
+      currentAttachments.add(filePath);
+
+      await taskRef.update({
+        'attachments': currentAttachments,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Dosya eklenirken hata oluştu: $e');
+    }
+  }
+
+  // Görev yorumlarını dinle
+  Stream<List<Map<String, dynamic>>> getTaskCommentsOld(String taskId) {
+    return _firestore
+        .collection(_collection)
+        .doc(taskId)
+        .collection('comments')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) {
+              final data = doc.data();
+              return {
+                ...data,
+                'id': doc.id,
+                'timestamp': (data['timestamp'] as Timestamp).toDate(),
+              };
+            }).toList());
+  }
+
+  // Görev yorumlarını dinle
+  Stream<List<CommentModel>> getTaskComments(String taskId) {
+    try {
+      return _firestore
+          .collection('tasks')
+          .doc(taskId)
+          .collection('comments')
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((snapshot) => snapshot.docs
+              .map((doc) => CommentModel.fromMap({...doc.data(), 'id': doc.id}))
+              .toList());
+    } catch (e) {
+      throw Exception('Yorumlar alınırken hata oluştu: $e');
     }
   }
 }

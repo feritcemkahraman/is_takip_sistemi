@@ -354,10 +354,62 @@ class NotificationService {
       return '${date.day}/${date.month}/${date.year}';
     }
   }
+
+  // Bildirim gönder
+  Future<void> sendNotification({
+    required String userId,
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      // Kullanıcının FCM token'ını al
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      final fcmToken = userDoc.data()?['fcmToken'];
+
+      if (fcmToken == null) {
+        print('FCM token bulunamadı: $userId');
+        return;
+      }
+
+      final response = await http.post(
+        Uri.parse(_fcmUrl),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'key=$_serverKey',
+        },
+        body: jsonEncode({
+          'notification': {
+            'title': title,
+            'body': body,
+          },
+          'data': data ?? {},
+          'to': fcmToken,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Bildirim gönderilemedi: ${response.body}');
+      }
+
+      // Bildirimi veritabanına kaydet
+      await _firestore.collection('notifications').add({
+        'userId': userId,
+        'title': title,
+        'body': body,
+        'data': data,
+        'timestamp': FieldValue.serverTimestamp(),
+        'isRead': false,
+      });
+    } catch (e) {
+      print('Bildirim gönderme hatası: $e');
+      throw e;
+    }
+  }
 }
 
 // Arka plan mesaj işleyici
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   print('Arka planda mesaj alındı: ${message.data}');
-} 
+}

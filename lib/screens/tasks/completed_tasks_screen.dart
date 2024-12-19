@@ -4,6 +4,7 @@ import '../../models/task_model.dart';
 import '../../services/task_service.dart';
 import '../../services/user_service.dart';
 import '../../models/user_model.dart';
+import 'task_detail_screen.dart';
 
 class CompletedTasksScreen extends StatelessWidget {
   const CompletedTasksScreen({Key? key}) : super(key: key);
@@ -90,6 +91,14 @@ class CompletedTasksScreen extends StatelessWidget {
                               );
                             },
                           ),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => TaskDetailScreen(task: task),
+                              ),
+                            );
+                          },
                           isThreeLine: true,
                         ),
                       );

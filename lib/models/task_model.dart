@@ -95,4 +95,22 @@ class TaskModel {
       metadata: metadata ?? this.metadata,
     );
   }
+
+  // Görevin bitiş tarihinin geçip geçmediğini kontrol et
+  bool get isOverdue => DateTime.now().isAfter(deadline);
+
+  // Görevin tamamlanıp tamamlanmadığını kontrol et
+  bool get isCompleted => status == 'completed';
+
+  // Görevin ilerleme durumunu hesapla
+  int get progress {
+    switch (status) {
+      case 'completed':
+        return 100;
+      case 'active':
+        return 50;
+      default:
+        return 0;
+    }
+  }
 }

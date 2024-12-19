@@ -13,6 +13,8 @@ import 'screens/create_task_screen.dart';
 import 'screens/tasks/active_tasks_screen.dart';
 import 'screens/tasks/completed_tasks_screen.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
@@ -38,6 +40,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'İş Takip Sistemi',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

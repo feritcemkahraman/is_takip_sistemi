@@ -24,13 +24,13 @@ dependencies:
   file_picker: ^6.1.1
   timeago: ^3.5.0
   share_plus: ^7.1.0
-  path_provider: ^2.1.1
+  path_provider: ^2.1.2
   flutter_typeahead: ^4.7.0
   firebase_storage: ^11.2.6
   firebase_messaging: ^14.7.10
   http: ^1.1.2
   image_picker: ^1.0.7
-  url_launcher: ^6.2.4
+  url_launcher: ^6.2.2
   emoji_picker_flutter: ^1.6.3
   record: ^5.0.4
   permission_handler: ^11.1.0

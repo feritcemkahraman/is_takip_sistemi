@@ -2,8 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../constants/app_constants.dart';
+import '../services/user_service.dart';
 
 class AuthService extends ChangeNotifier {
   final FirebaseAuth _auth;
@@ -429,6 +432,70 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       print('Kayıt hatası: $e');
       throw Exception('Kayıt olurken hata oluştu: $e');
+    }
+  }
+
+  // Mevcut kullanıcıyı UserService'e kaydet
+  Future<void> _updateUserService(UserModel user, BuildContext context) async {
+    try {
+      final userService = Provider.of<UserService>(context, listen: false);
+      userService.setCurrentUser(user);
+    } catch (e) {
+      print('UserService güncellenirken hata: $e');
+    }
+  }
+
+  // Login metodunu güncelle
+  Future<UserModel> login(String username, String password, BuildContext context) async {
+    try {
+      print('Giriş denemesi - Kullanıcı adı: $username');
+      
+      final userDoc = await _firestore
+          .collection(_collection)
+          .where('username', isEqualTo: username)
+          .limit(1)
+          .get();
+
+      if (userDoc.docs.isEmpty) {
+        throw Exception('Kullanıcı bulunamadı');
+      }
+
+      final user = UserModel.fromMap({...userDoc.docs.first.data(), 'id': userDoc.docs.first.id});
+      
+      // Şifre kontrolü
+      if (password != user.metadata['password']) {
+        throw Exception('Hatalı şifre');
+      }
+
+      // Son giriş zamanını güncelle
+      await _firestore.collection(_collection).doc(user.id).update({
+        'lastLoginAt': FieldValue.serverTimestamp(),
+      });
+
+      // Aktif kullanıcıyı kaydet
+      await _setActiveUsername(username);
+
+      // UserService'i güncelle
+      await _updateUserService(user, context);
+
+      return user;
+    } catch (e) {
+      print('Login hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Çıkış yap
+  Future<void> logout(BuildContext context) async {
+    try {
+      await _setActiveUsername(null);
+      
+      // UserService'den kullanıcıyı temizle
+      final userService = Provider.of<UserService>(context, listen: false);
+      userService.setCurrentUser(null);
+    } catch (e) {
+      print('Logout hatası: $e');
+      rethrow;
     }
   }
 }

@@ -8,6 +8,30 @@ class UserService extends ChangeNotifier {
   UserService({FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
+  UserModel? _currentUser;
+
+  UserModel? get currentUser => _currentUser;
+
+  // Mevcut kullanıcıyı ayarla
+  void setCurrentUser(UserModel? user) {
+    _currentUser = user;
+    notifyListeners();
+  }
+
+  // Mevcut kullanıcıyı Firebase Auth'dan al
+  Future<void> loadCurrentUser(String userId) async {
+    try {
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        _currentUser = UserModel.fromMap(userDoc.data()!..['id'] = userDoc.id);
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Mevcut kullanıcı yüklenemedi: $e');
+      rethrow;
+    }
+  }
+
   Future<UserModel> getUserById(String userId) async {
     try {
       final doc = await _firestore.collection('users').doc(userId).get();

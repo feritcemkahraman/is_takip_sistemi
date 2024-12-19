@@ -172,6 +172,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
               try {
                 final savedPath = await localStorageService.saveTaskAttachment(
                   taskId,
+                  file.name,
                   File(file.path!),
                 );
                 attachmentPaths.add(savedPath);

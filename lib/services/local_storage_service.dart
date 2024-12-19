@@ -13,10 +13,9 @@ class LocalStorageService extends ChangeNotifier {
     return taskAttachmentsDir.path;
   }
 
-  Future<String> saveTaskAttachment(String taskId, File file) async {
+  Future<String> saveTaskAttachment(String taskId, String fileName, File file) async {
     try {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = path.basename(file.path);
       final uniqueFileName = '${timestamp}_$fileName';
       
       // Görev klasörünü oluştur

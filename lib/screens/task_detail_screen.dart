@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/task_model.dart';
 import '../models/user_model.dart';
 import '../services/task_service.dart';
-import '../services/auth_service.dart';
-import '../widgets/custom_text_field.dart';
-import '../constants/app_constants.dart';
-import '../constants/app_theme.dart';
+import '../services/user_service.dart';
+import '../services/notification_service.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 
 class TaskDetailScreen extends StatefulWidget {
-  final String taskId;
+  final TaskModel task;
 
   const TaskDetailScreen({
     Key? key,
-    required this.taskId,
+    required this.task,
   }) : super(key: key);
 
   @override
@@ -22,7 +21,7 @@ class TaskDetailScreen extends StatefulWidget {
 }
 
 class _TaskDetailScreenState extends State<TaskDetailScreen> {
-  final _commentController = TextEditingController();
+  final TextEditingController _commentController = TextEditingController();
   bool _isLoading = false;
 
   @override
@@ -37,20 +36,85 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final taskService = Provider.of<TaskService>(context, listen: false);
-      final currentUser = await authService.getCurrentUserModel();
+      final taskService = context.read<TaskService>();
+      final notificationService = context.read<NotificationService>();
+      final currentUser = context.read<UserService>().currentUser;
 
-      if (currentUser == null) {
-        throw Exception('Kullanıcı oturum açmamış');
+      await taskService.addComment(
+        widget.task.id,
+        _commentController.text,
+        currentUser?.id ?? '',
+      );
+
+      // Görev sahibine bildirim gönder
+      if (widget.task.assignedTo != currentUser?.id) {
+        await notificationService.sendNotification(
+          userId: widget.task.assignedTo,
+          title: 'Yeni Yorum',
+          body: '${currentUser?.name} görevinize yorum ekledi',
+          data: {'taskId': widget.task.id},
+        );
       }
 
-      await taskService.addComment(widget.taskId, _commentController.text, currentUser.id);
-      _commentController.clear();
+      if (mounted) {
+        _commentController.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Yorum eklendi')),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Yorum eklenirken hata oluştu: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Hata: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _addAttachment() async {
+    try {
+      final taskService = context.read<TaskService>();
+      final notificationService = context.read<NotificationService>();
+      final currentUser = context.read<UserService>().currentUser;
+
+      FilePickerResult? result = await FilePicker.platform.pickFiles();
+      
+      if (result != null) {
+        setState(() => _isLoading = true);
+        
+        File file = File(result.files.single.path!);
+        String fileName = result.files.single.name;
+        
+        // Dosyayı yükle ve yolunu al
+        String filePath = '${widget.task.id}/$fileName';
+        await taskService.addAttachment(widget.task.id, filePath);
+
+        // Görev sahibine bildirim gönder
+        if (widget.task.assignedTo != currentUser?.id) {
+          await notificationService.sendNotification(
+            userId: widget.task.assignedTo,
+            title: 'Yeni Dosya',
+            body: '${currentUser?.name} göreve dosya ekledi',
+            data: {'taskId': widget.task.id},
+          );
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Dosya eklendi')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Hata: $e')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -60,232 +124,182 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final userService = context.watch<UserService>();
+    final currentUser = userService.currentUser;
+    final canInteract = currentUser?.id == widget.task.assignedTo || 
+                       currentUser?.role == UserModel.roleAdmin;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Görev Detayı'),
-        backgroundColor: AppTheme.primaryColor,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
       ),
-      body: StreamBuilder<TaskModel?>(
-        stream: Provider.of<TaskService>(context).getTaskStream(widget.taskId),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Hata: ${snapshot.error}'),
-            );
-          }
-
-          if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-
-          final task = snapshot.data!;
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  task.title,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  task.description,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Color(AppConstants.taskStatusColors[task.status]!),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        AppConstants.taskStatusLabels[task.status]!,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Color(AppConstants.taskPriorityColors[task.priority]!),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        AppConstants.taskPriorityLabels[task.priority]!,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Icon(Icons.person_outline),
-                    const SizedBox(width: 8),
-                    FutureBuilder<UserModel?>(
-                      future: Provider.of<AuthService>(context).getUserById(task.assignedTo),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData && snapshot.data != null) {
-                          final user = snapshot.data!;
-                          return Text(
-                            '${user.name} (${user.department})',
-                            style: Theme.of(context).textTheme.bodyLarge,
-                          );
-                        }
-                        return const SizedBox();
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_today),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Bitiş: ${task.dueDate.day}/${task.dueDate.month}/${task.dueDate.year}',
-                      style: TextStyle(
-                        color: task.isOverdue ? Colors.red : null,
-                      ),
-                    ),
-                  ],
-                ),
-                if (task.progress > 0) ...[
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: LinearProgressIndicator(
-                          value: task.progress / 100,
-                          backgroundColor: Colors.grey[300],
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            task.isCompleted ? Colors.green : Colors.blue,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '%${task.progress.toInt()}',
-                        style: TextStyle(
-                          color: task.isCompleted ? Colors.green : Colors.blue,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.task.title,
+                    style: Theme.of(context).textTheme.headlineSmall,
                   ),
-                ],
-                if (task.tags.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(widget.task.description),
                   const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: task.tags.map((tag) {
-                      return Chip(
-                        label: Text(tag),
-                        onDeleted: () async {
-                          try {
-                            await Provider.of<TaskService>(context, listen: false)
-                                .removeTaskTag(task.id, tag);
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Etiket silinirken hata oluştu: $e')),
-                            );
-                          }
-                        },
+                  FutureBuilder<UserModel?>(
+                    future: userService.getUserById(widget.task.assignedTo),
+                    builder: (context, snapshot) {
+                      final assignedUser = snapshot.data;
+                      return Text(
+                        'Atanan: ${assignedUser?.name ?? 'Yükleniyor...'}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       );
-                    }).toList(),
+                    },
                   ),
-                ],
-                const SizedBox(height: 24),
-                Text(
-                  'Yorumlar',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: CustomTextField(
-                        controller: _commentController,
-                        labelText: 'Yorum ekle',
-                      ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Bitiş: ${widget.task.deadline.day}/${widget.task.deadline.month}/${widget.task.deadline.year}',
+                    style: TextStyle(
+                      color: widget.task.deadline.isBefore(DateTime.now()) ? 
+                             Colors.red : null,
                     ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.send),
-                      onPressed: _isLoading ? null : _addComment,
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Ekler',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                StreamBuilder<List<Map<String, dynamic>>>(
-                  stream: Provider.of<TaskService>(context).getComments(task.id),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return Text('Hata: ${snapshot.error}');
-                    }
-
-                    if (!snapshot.hasData) {
-                      return const Center(
-                        child: CircularProgressIndicator(),
-                      );
-                    }
-
-                    final comments = snapshot.data!;
-                    if (comments.isEmpty) {
-                      return const Text('Henüz yorum yok');
-                    }
-
-                    return ListView.builder(
+                  ),
+                  const SizedBox(height: 8),
+                  if (widget.task.attachments.isEmpty)
+                    const Text('Henüz ek bulunmuyor')
+                  else
+                    ListView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      itemCount: comments.length,
+                      itemCount: widget.task.attachments.length,
                       itemBuilder: (context, index) {
-                        final comment = comments[index];
-                        return FutureBuilder<UserModel?>(
-                          future: Provider.of<AuthService>(context)
-                              .getUserById(comment['userId'] as String),
-                          builder: (context, snapshot) {
-                            final userName = snapshot.data?.name ?? 'Bilinmeyen Kullanıcı';
-                            return Card(
-                              margin: const EdgeInsets.symmetric(vertical: 8),
-                              child: ListTile(
-                                title: Text(comment['text'] as String),
-                                subtitle: Text(userName),
-                                trailing: Text(
-                                  '${(comment['createdAt'] as Timestamp).toDate().day}/'
-                                  '${(comment['createdAt'] as Timestamp).toDate().month}/'
-                                  '${(comment['createdAt'] as Timestamp).toDate().year}',
-                                ),
-                              ),
-                            );
+                        final attachment = widget.task.attachments[index];
+                        final fileName = attachment.split('/').last;
+                        return ListTile(
+                          leading: const Icon(Icons.attachment),
+                          title: Text(fileName),
+                          onTap: () {
+                            // Dosyayı aç
                           },
                         );
                       },
-                    );
-                  },
-                ),
-              ],
+                    ),
+                  if (canInteract) ...[
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: _addAttachment,
+                      icon: const Icon(Icons.attach_file),
+                      label: const Text('Dosya Ekle'),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Yorumlar',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: context.read<TaskService>().getTaskComments(widget.task.id),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final comments = snapshot.data ?? [];
+
+                      if (comments.isEmpty) {
+                        return const Text('Henüz yorum yapılmamış');
+                      }
+
+                      return ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: comments.length,
+                        itemBuilder: (context, index) {
+                          final comment = comments[index];
+                          return FutureBuilder<UserModel?>(
+                            future: userService.getUserById(comment['userId']),
+                            builder: (context, snapshot) {
+                              final user = snapshot.data;
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            user?.name ?? 'Bilinmeyen Kullanıcı',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          Text(
+                                            _formatDate(comment['timestamp']),
+                                            style: TextStyle(
+                                              color: Colors.grey[600],
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(comment['text']),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  if (canInteract) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _commentController,
+                            decoration: const InputDecoration(
+                              hintText: 'Yorum yaz...',
+                              border: OutlineInputBorder(),
+                            ),
+                            maxLines: 3,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: _addComment,
+                          icon: const Icon(Icons.send),
+                          color: Theme.of(context).primaryColor,
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
-          );
-        },
-      ),
     );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute}';
   }
 }
