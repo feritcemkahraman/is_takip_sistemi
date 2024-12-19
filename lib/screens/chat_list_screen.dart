@@ -260,7 +260,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Yeni Sohbet'),
+        title: const Text(
+          'Sohbetler',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
@@ -274,65 +280,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               );
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                builder: (context) => Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.person_add),
-                      title: const Text('Yeni Sohbet'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _showNewChatDialog(context);
-                      },
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.group_add),
-                      title: const Text('Yeni Grup'),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _showNewGroupDialog(context);
-                      },
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          showModalBottomSheet(
-            context: context,
-            builder: (context) => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.person_add),
-                  title: const Text('Yeni Sohbet'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showNewChatDialog(context);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.group_add),
-                  title: const Text('Yeni Grup'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _showNewGroupDialog(context);
-                  },
-                ),
-              ],
-            ),
-          );
-        },
-        child: const Icon(Icons.add),
       ),
       body: Stack(
         children: [
@@ -354,8 +302,37 @@ class _ChatListScreenState extends State<ChatListScreen> {
               final chats = snapshot.data!;
 
               if (chats.isEmpty) {
-                return const Center(
-                  child: Text('Henüz mesajlaşma bulunmamaktadır'),
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.chat_bubble_outline,
+                        size: 64,
+                        color: Colors.grey[400],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Henüz sohbet bulunmuyor',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ElevatedButton.icon(
+                        onPressed: () => _showNewChatDialog(context),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Yeni Sohbet Başlat'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               }
 
@@ -363,38 +340,100 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 itemCount: chats.length,
                 itemBuilder: (context, index) {
                   final chat = chats[index];
-                  return ListTile(
-                    leading: CircleAvatar(
-                      child: Text(chat.name[0].toUpperCase()),
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
                     ),
-                    title: Text(chat.name),
-                    subtitle: Text(chat.lastMessage ?? 'Henüz mesaj yok'),
-                    trailing: chat.unreadCount > 0
-                        ? Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).primaryColor,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Text(
-                              chat.unreadCount.toString(),
-                              style: const TextStyle(
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      leading: CircleAvatar(
+                        radius: 28,
+                        backgroundColor: chat.isGroup ? Colors.blue : Colors.purple,
+                        child: chat.avatar != null
+                            ? ClipOval(
+                                child: Image.network(
+                                  chat.avatar!,
+                                  width: 56,
+                                  height: 56,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : Icon(
+                                chat.isGroup ? Icons.group : Icons.person,
                                 color: Colors.white,
-                                fontSize: 12,
+                                size: 28,
+                              ),
+                      ),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              chat.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
                               ),
                             ),
-                          )
-                        : null,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ChatDetailScreen(
-                            chat: chat,
                           ),
-                        ),
-                      );
-                    },
+                          if (chat.lastMessageTime != null)
+                            Text(
+                              _formatTime(chat.lastMessageTime!),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                        ],
+                      ),
+                      subtitle: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              chat.lastMessage ?? 'Henüz mesaj yok',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 14,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (chat.unreadCount > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                chat.unreadCount.toString(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ChatDetailScreen(
+                              chat: chat,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   );
                 },
               );
@@ -409,6 +448,81 @@ class _ChatListScreenState extends State<ChatListScreen> {
             ),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          showModalBottomSheet(
+            context: context,
+            builder: (context) => Container(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: Colors.purple,
+                      child: Icon(Icons.person_add, color: Colors.white),
+                    ),
+                    title: const Text('Yeni Sohbet'),
+                    subtitle: const Text('Bire bir sohbet başlat'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showNewChatDialog(context);
+                    },
+                  ),
+                  const Divider(),
+                  ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: Colors.blue,
+                      child: Icon(Icons.group_add, color: Colors.white),
+                    ),
+                    title: const Text('Yeni Grup'),
+                    subtitle: const Text('Grup sohbeti oluştur'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showNewGroupDialog(context);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+        child: const Icon(Icons.add),
+      ),
     );
+  }
+
+  String _formatTime(DateTime time) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final messageDate = DateTime(time.year, time.month, time.day);
+
+    if (messageDate == today) {
+      return '${time.hour}:${time.minute.toString().padLeft(2, '0')}';
+    } else if (messageDate == yesterday) {
+      return 'Dün';
+    } else if (now.difference(time).inDays < 7) {
+      switch (time.weekday) {
+        case 1:
+          return 'Pzt';
+        case 2:
+          return 'Sal';
+        case 3:
+          return 'Çar';
+        case 4:
+          return 'Per';
+        case 5:
+          return 'Cum';
+        case 6:
+          return 'Cmt';
+        case 7:
+          return 'Paz';
+        default:
+          return '';
+      }
+    } else {
+      return '${time.day}/${time.month}/${time.year}';
+    }
   }
 } 
