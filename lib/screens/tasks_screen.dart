@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import '../constants/app_constants.dart';
+import 'package:provider/provider.dart';
 import '../models/task_model.dart';
 import '../models/user_model.dart';
 import '../services/task_service.dart';
+import '../services/auth_service.dart';
+import 'tasks/task_detail_screen.dart';
 import '../widgets/task_card.dart';
 
 class TasksScreen extends StatefulWidget {

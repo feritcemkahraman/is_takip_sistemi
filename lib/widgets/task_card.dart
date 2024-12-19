@@ -1,35 +1,38 @@
 import 'package:flutter/material.dart';
-import '../constants/app_constants.dart';
 import '../models/task_model.dart';
-import '../screens/task_detail_screen.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/user_model.dart';
+import '../services/user_service.dart';
+import '../screens/tasks/task_detail_screen.dart';
+import 'package:provider/provider.dart';
 
 class TaskCard extends StatelessWidget {
   final TaskModel task;
   final bool showAssignee;
-  final VoidCallback? onStatusChanged;
+  final VoidCallback onStatusChanged;
 
   const TaskCard({
     Key? key,
     required this.task,
     this.showAssignee = true,
-    this.onStatusChanged,
+    required this.onStatusChanged,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+      margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         onTap: () {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => TaskDetailScreen(taskId: task.id),
+              builder: (context) => TaskDetailScreen(
+                task: task,
+                canInteract: true,
+              ),
             ),
-          ).then((_) => onStatusChanged?.call());
+          ).then((_) => onStatusChanged());
         },
-        borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -46,136 +49,64 @@ class TaskCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (task.priority > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _getPriorityColor(task.priority),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _getPriorityText(task.priority),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(task.description),
+              const SizedBox(height: 8),
+              if (showAssignee)
+                FutureBuilder<UserModel?>(
+                  future: context.read<UserService>().getUserById(task.assignedTo),
+                  builder: (context, snapshot) {
+                    final user = snapshot.data;
+                    return Text(
+                      'Atanan: ${user?.name ?? 'Yükleniyor...'}',
+                      style: const TextStyle(
+                        color: Colors.grey,
+                      ),
+                    );
+                  },
+                ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: Color(AppConstants.taskStatusColors[task.status]!),
+                      color: _getStatusColor(task.status),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          margin: const EdgeInsets.only(right: 8),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Color(AppConstants.taskPriorityColors[task.priority]!),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            AppConstants.taskPriorityLabels[task.priority]!,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          AppConstants.taskStatusLabels[task.status]!,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      _getStatusText(task.status),
+                      style: const TextStyle(color: Colors.white),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                task.description,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  if (showAssignee)
-                    Expanded(
-                      child: StreamBuilder<DocumentSnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection(AppConstants.usersCollection)
-                            .doc(task.assignedTo)
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          if (snapshot.hasData && snapshot.data!.exists) {
-                            final userData = snapshot.data!.data() as Map<String, dynamic>;
-                            return Row(
-                              children: [
-                                const Icon(
-                                  Icons.person_outline,
-                                  size: 16,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    '${userData['name']} (${userData['department']})',
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 14,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            );
-                          }
-                          return const SizedBox();
-                        },
-                      ),
+                  Text(
+                    'Bitiş: ${task.deadline.day}/${task.deadline.month}/${task.deadline.year}',
+                    style: TextStyle(
+                      color: task.deadline.isBefore(DateTime.now())
+                          ? Colors.red
+                          : Colors.grey,
                     ),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.calendar_today,
-                        size: 16,
-                        color: Colors.grey,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${task.dueDate.day}/${task.dueDate.month}/${task.dueDate.year}',
-                        style: TextStyle(
-                          color: task.isOverdue ? Colors.red : Colors.grey,
-                          fontSize: 14,
-                        ),
-                      ),
-                      if (task.progress > 0) ...[
-                        const SizedBox(width: 16),
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            value: task.progress / 100,
-                            strokeWidth: 2,
-                            backgroundColor: Colors.grey[300],
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              task.isCompleted ? Colors.green : Colors.blue,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '%${task.progress.toInt()}',
-                          style: TextStyle(
-                            color: task.isCompleted ? Colors.green : Colors.blue,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ],
                   ),
                 ],
               ),
@@ -184,5 +115,49 @@ class TaskCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'completed':
+        return Colors.green;
+      case 'active':
+        return Colors.blue;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getStatusText(String status) {
+    switch (status) {
+      case 'completed':
+        return 'Tamamlandı';
+      case 'active':
+        return 'Aktif';
+      default:
+        return 'Beklemede';
+    }
+  }
+
+  Color _getPriorityColor(int priority) {
+    switch (priority) {
+      case 3:
+        return Colors.red;
+      case 2:
+        return Colors.orange;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  String _getPriorityText(int priority) {
+    switch (priority) {
+      case 3:
+        return 'Yüksek';
+      case 2:
+        return 'Orta';
+      default:
+        return 'Düşük';
+    }
   }
 }

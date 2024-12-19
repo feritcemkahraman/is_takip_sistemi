@@ -5,10 +5,11 @@ import '../models/user_model.dart';
 import '../services/task_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/task_list_item.dart';
-import '../screens/task_detail_screen.dart';
-import '../screens/create_task_screen.dart';
+import 'tasks/task_detail_screen.dart';
+import 'create_task_screen.dart';
 import '../constants/app_constants.dart';
 import '../constants/app_theme.dart';
+import '../theme/app_theme.dart';
 
 class TaskListScreen extends StatefulWidget {
   final String? userId;
@@ -59,7 +60,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => TaskDetailScreen(taskId: task.id),
+        builder: (context) => TaskDetailScreen(
+          task: task,
+          canInteract: true,
+        ),
       ),
     );
   }
@@ -142,9 +146,29 @@ class _TaskListScreenState extends State<TaskListScreen> {
                         horizontal: 16,
                         vertical: 8,
                       ),
-                      child: TaskListItem(
-                        task: task,
-                        onTap: () => _navigateToTaskDetail(task),
+                      child: ListTile(
+                        title: Text(
+                          task.title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Text(task.description),
+                        trailing: Icon(
+                          _getStatusIcon(task.status),
+                          color: _getStatusColor(task.status),
+                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => TaskDetailScreen(
+                                task: task,
+                                canInteract: true,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     );
                   },

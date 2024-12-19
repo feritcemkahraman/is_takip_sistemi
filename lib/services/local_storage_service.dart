@@ -72,4 +72,24 @@ class LocalStorageService extends ChangeNotifier {
       return null;
     }
   }
+
+  // Dosyayı kaydet
+  Future<void> saveFile(File file, String filePath) async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final targetPath = '${appDir.path}/$filePath';
+      final targetFile = File(targetPath);
+
+      // Hedef klasörü oluştur
+      if (!await targetFile.parent.exists()) {
+        await targetFile.parent.create(recursive: true);
+      }
+
+      // Dosyayı kopyala
+      await file.copy(targetPath);
+    } catch (e) {
+      print('Error saving file: $e');
+      rethrow;
+    }
+  }
 }

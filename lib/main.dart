@@ -12,6 +12,7 @@ import 'screens/admin/admin_dashboard_screen.dart';
 import 'screens/create_task_screen.dart';
 import 'screens/tasks/active_tasks_screen.dart';
 import 'screens/tasks/completed_tasks_screen.dart';
+import 'services/notification_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -27,6 +28,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => AuthService()),
         ChangeNotifierProvider(create: (_) => UserService()),
         ChangeNotifierProvider(create: (_) => TaskService()),
+        Provider(create: (_) => NotificationService()),
         ChangeNotifierProvider(create: (_) => LocalStorageService()),
       ],
       child: const MyApp(),

@@ -186,39 +186,65 @@ class TaskService with ChangeNotifier {
   }
 
   // Göreve yorum ekle
-  Future<void> addComment(CommentModel comment) async {
+  Future<void> addComment({
+    required String taskId,
+    required String userId,
+    required String content,
+  }) async {
     try {
-      final taskRef = _firestore.collection('tasks').doc(comment.taskId);
-      final commentRef = taskRef.collection('comments').doc(comment.id);
-      
+      final commentRef = _firestore
+          .collection(_collection)
+          .doc(taskId)
+          .collection('comments')
+          .doc();
+
       await commentRef.set({
-        ...comment.toMap(),
+        'id': commentRef.id,
+        'userId': userId,
+        'content': content,
         'createdAt': FieldValue.serverTimestamp(),
       });
     } catch (e) {
-      throw Exception('Yorum eklenirken hata oluştu: $e');
+      print('Error adding comment: $e');
+      rethrow;
     }
   }
 
-  // Göreve yorum ekle
-  Future<void> addCommentOld(String taskId, String text, String userId) async {
+  // Yorum sil
+  Future<void> deleteComment({
+    required String taskId,
+    required String commentId,
+  }) async {
     try {
-      await _firestore.collection(_collection).doc(taskId).collection('comments').add({
-        'text': text,
-        'userId': userId,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-      notifyListeners();
+      await _firestore
+          .collection(_collection)
+          .doc(taskId)
+          .collection('comments')
+          .doc(commentId)
+          .delete();
     } catch (e) {
-      print('Error adding comment: $e');
-      throw e;
+      print('Error deleting comment: $e');
+      rethrow;
     }
+  }
+
+  // Görev yorumlarını getir
+  Stream<List<CommentModel>> getTaskComments(String taskId) {
+    return _firestore
+        .collection(_collection)
+        .doc(taskId)
+        .collection('comments')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => CommentModel.fromFirestore(doc))
+            .toList());
   }
 
   // Göreve dosya ekle
   Future<void> addAttachment(String taskId, String filePath) async {
     try {
-      final taskRef = _firestore.collection('tasks').doc(taskId);
+      final taskRef = _firestore.collection(_collection).doc(taskId);
       final task = await taskRef.get();
       
       if (!task.exists) {
@@ -237,38 +263,19 @@ class TaskService with ChangeNotifier {
     }
   }
 
-  // Görev yorumlarını dinle
-  Stream<List<Map<String, dynamic>>> getTaskCommentsOld(String taskId) {
+  // Görev stream'i
+  Stream<TaskModel> getTaskStream(String taskId) {
     return _firestore
         .collection(_collection)
         .doc(taskId)
-        .collection('comments')
-        .orderBy('timestamp', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) {
-              final data = doc.data();
-              return {
-                ...data,
-                'id': doc.id,
-                'timestamp': (data['timestamp'] as Timestamp).toDate(),
-              };
-            }).toList());
+        .map((doc) => TaskModel.fromFirestore(doc));
   }
 
-  // Görev yorumlarını dinle
-  Stream<List<CommentModel>> getTaskComments(String taskId) {
-    try {
-      return _firestore
-          .collection('tasks')
-          .doc(taskId)
-          .collection('comments')
-          .orderBy('createdAt', descending: true)
-          .snapshots()
-          .map((snapshot) => snapshot.docs
-              .map((doc) => CommentModel.fromMap({...doc.data(), 'id': doc.id}))
-              .toList());
-    } catch (e) {
-      throw Exception('Yorumlar alınırken hata oluştu: $e');
-    }
+  // Dosya silme
+  Future<void> removeAttachment(String taskId, String filePath) async {
+    await _firestore.collection(_collection).doc(taskId).update({
+      'attachments': FieldValue.arrayRemove([filePath])
+    });
   }
 }

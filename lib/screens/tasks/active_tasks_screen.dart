@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/task_model.dart';
+import '../../models/user_model.dart';
 import '../../services/task_service.dart';
 import '../../services/user_service.dart';
-import '../../models/user_model.dart';
 import 'task_detail_screen.dart';
 
 class ActiveTasksScreen extends StatelessWidget {
@@ -79,24 +79,26 @@ class ActiveTasksScreen extends StatelessWidget {
                                         await taskService.deleteTask(task.id);
                                         if (context.mounted) {
                                           Navigator.pop(context);
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Görev silindi')),
+                                          );
                                         }
                                       },
-                                      child: const Text(
-                                        'Sil',
-                                        style: TextStyle(color: Colors.red),
-                                      ),
+                                      child: const Text('Sil'),
                                     ),
                                   ],
                                 ),
                               );
                             },
                           ),
-                          isThreeLine: true,
                           onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => TaskDetailScreen(task: task),
+                                builder: (context) => TaskDetailScreen(
+                                  task: task,
+                                  canInteract: true,
+                                ),
                               ),
                             );
                           },

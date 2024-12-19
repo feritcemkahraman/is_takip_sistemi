@@ -27,67 +27,33 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_formKey.currentState?.validate() ?? false) {
+      setState(() => _isLoading = true);
 
-    setState(() => _isLoading = true);
-
-    try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      print('Giriş denemesi başlatılıyor...');
-      print('Kullanıcı adı: ${_usernameController.text.trim()}');
-      
-      final user = await authService.signInWithUsername(
-        _usernameController.text.trim(),
-        _passwordController.text.trim(),
-      );
-
-      print('Giriş başarılı: ${user.name}, Rol: ${user.role}');
-
-      if (!mounted) return;
-      
-      // Başarılı giriş bildirimi
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Hoş geldiniz, ${user.name}!'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-
-      // Kullanıcı rolüne göre yönlendirme
-      if (user.role == 'admin') {
-        if (context.mounted) {
-          Navigator.pushReplacementNamed(context, '/admin-dashboard-screen');
-        }
-      } else {
-        // TODO: Çalışan dashboard'u daha sonra eklenecek
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Çalışan paneli henüz hazır değil.'),
-            duration: Duration(seconds: 2),
-          ),
+      try {
+        final user = await context.read<AuthService>().signInWithEmailAndPassword(
+          email: _usernameController.text.trim(),
+          password: _passwordController.text.trim(),
+          context: context,
         );
-      }
-    } catch (e) {
-      print('Giriş hatası: $e');
-      if (!mounted) return;
-      
-      String errorMessage = e.toString();
-      if (errorMessage.contains('Kullanıcı bulunamadı')) {
-        errorMessage = 'Kullanıcı adı veya şifre hatalı';
-      } else if (errorMessage.contains('Yanlış şifre')) {
-        errorMessage = 'Kullanıcı adı veya şifre hatalı';
-      }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage.replaceAll('Exception: ', '')),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
+        if (!mounted) return;
+
+        // Kullanıcı rolüne göre yönlendirme yap
+        if (user.role == AppConstants.roleAdmin) {
+          Navigator.pushReplacementNamed(context, '/admin-dashboard-screen');
+        } else {
+          Navigator.pushReplacementNamed(context, '/tasks-screen');
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      } finally {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
       }
     }
   }

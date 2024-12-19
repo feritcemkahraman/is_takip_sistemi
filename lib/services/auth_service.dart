@@ -146,6 +146,7 @@ class AuthService extends ChangeNotifier {
   Future<UserModel> signInWithEmailAndPassword({
     required String email,
     required String password,
+    required BuildContext context,
   }) async {
     try {
       print('Giriş denemesi - Kullanıcı adı: $email');
@@ -195,6 +196,10 @@ class AuthService extends ChangeNotifier {
       print('Tamamlanmış kullanıcı verileri: $completeUserData');
 
       final userModel = UserModel.fromMap(completeUserData);
+      
+      // UserService'i güncelle
+      context.read<UserService>().setCurrentUser(userModel);
+      
       print('Giriş başarılı - Kullanıcı: ${userModel.name}, Rol: ${userModel.role}');
       return userModel;
     } catch (e) {
