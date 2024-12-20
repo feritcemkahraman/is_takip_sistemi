@@ -278,4 +278,22 @@ class TaskService with ChangeNotifier {
       'attachments': FieldValue.arrayRemove([filePath])
     });
   }
+
+  // Aktif görevleri stream olarak getir
+  Stream<List<TaskModel>> getActiveTasksStream() {
+    try {
+      return _firestore
+          .collection(_collection)
+          .where('status', isEqualTo: 'active')
+          .orderBy('deadline')
+          .orderBy('__name__')
+          .snapshots()
+          .map((snapshot) => snapshot.docs
+              .map((doc) => TaskModel.fromFirestore(doc))
+              .toList());
+    } catch (e) {
+      print('Error getting active tasks stream: $e');
+      return Stream.value([]);
+    }
+  }
 }

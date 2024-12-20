@@ -17,6 +17,7 @@ import 'screens/tasks/active_tasks_screen.dart';
 import 'screens/tasks/completed_tasks_screen.dart';
 import 'screens/chat_list_screen.dart';
 import 'screens/new_chat_screen.dart';
+import 'screens/tasks/employee_dashboard_screen.dart';
 import 'services/notification_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -81,6 +82,18 @@ class MyApp extends StatelessWidget {
         '/completed-tasks-screen': (context) => const CompletedTasksScreen(),
         '/chat-list-screen': (context) => const ChatListScreen(),
         '/new-chat-screen': (context) => const NewChatScreen(),
+        '/tasks-screen': (context) => const EmployeeDashboardScreen(),
+      },
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/tasks-screen':
+            return MaterialPageRoute(
+              builder: (context) => const ActiveTasksScreen(),
+              settings: settings,
+            );
+          default:
+            return null;
+        }
       },
     );
   }

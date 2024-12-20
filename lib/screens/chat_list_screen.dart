@@ -4,6 +4,7 @@ import '../models/chat_model.dart';
 import '../models/user_model.dart';
 import '../services/chat_service.dart';
 import '../services/user_service.dart';
+import '../services/auth_service.dart';
 import '../widgets/user_search_delegate.dart';
 import 'chat_detail_screen.dart';
 
@@ -248,469 +249,137 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final chatService = context.read<ChatService>();
-    final userService = context.read<UserService>();
+    final chatService = Provider.of<ChatService>(context);
+    final userService = Provider.of<UserService>(context);
     final currentUser = userService.currentUser;
-
-    if (currentUser == null) {
-      return const Scaffold(
-        body: Center(
-          child: Text('Kullanıcı oturumu bulunamadı'),
-        ),
-      );
-    }
+    final isAdmin = currentUser?.role == 'admin';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Sohbetler',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        centerTitle: false,
+        title: const Text('Sohbetler'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              showSearch(
-                context: context,
-                delegate: UserSearchDelegate(
-                  userService: context.read<UserService>(),
-                  chatService: context.read<ChatService>(),
-                ),
-              );
-            },
-          ),
+          if (isAdmin)
+            IconButton(
+              icon: const Icon(Icons.group_add),
+              onPressed: () => _showNewGroupDialog(context),
+            ),
         ],
       ),
-      body: Stack(
-        children: [
-          StreamBuilder<List<ChatModel>>(
-            stream: chatService.getChats(),
-            builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                return Center(
-                  child: Text('Hata: ${snapshot.error}'),
-                );
-              }
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : StreamBuilder<List<ChatModel>>(
+              stream: chatService.getUserChats(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-              if (!snapshot.hasData) {
-                return const Center(
-                  child: CircularProgressIndicator(),
-                );
-              }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Hata: ${snapshot.error}'));
+                }
 
-              final chats = snapshot.data!;
+                final chats = snapshot.data ?? [];
 
-              if (chats.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.chat_bubble_outline,
-                        size: 64,
-                        color: Colors.grey[400],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Henüz sohbet bulunmuyor',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey[600],
+                if (chats.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('Henüz hiç sohbetiniz yok'),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () => _showNewChatDialog(context),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Yeni Sohbet Başlat'),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      ElevatedButton.icon(
-                        onPressed: () => _showNewChatDialog(context),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Yeni Sohbet Başlat'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              return ListView.builder(
-                itemCount: chats.length,
-                itemBuilder: (context, index) {
-                  final chat = chats[index];
-                  return Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                      ],
                     ),
-                    child: InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ChatDetailScreen(
-                              chat: chat,
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: chats.length,
+                  itemBuilder: (context, index) {
+                    final chat = chats[index];
+                    return FutureBuilder<String>(
+                      future: _getChatTitle(chat, currentUser?.id ?? '', userService),
+                      builder: (context, snapshot) {
+                        final title = snapshot.data ?? 'Yükleniyor...';
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: chat.isGroup ? Colors.green : Colors.blue,
+                            child: Icon(
+                              chat.isGroup ? Icons.group : Icons.person,
+                              color: Colors.white,
                             ),
                           ),
-                        );
-                      },
-                      onLongPress: () {
-                        showModalBottomSheet(
-                          context: context,
-                          builder: (context) => Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ListTile(
-                                leading: const Icon(Icons.notifications_off),
-                                title: const Text('Sessize Al'),
-                                onTap: () async {
-                                  try {
-                                    await chatService.toggleMuteChat(chat.id);
-                                    if (mounted) {
-                                      Navigator.pop(context);
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('Sohbet sessize alındı'),
-                                        ),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    if (mounted) {
-                                      Navigator.pop(context);
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Hata: $e'),
-                                        ),
-                                      );
-                                    }
-                                  }
-                                },
-                              ),
-                              ListTile(
-                                leading: const Icon(Icons.delete, color: Colors.red),
-                                title: const Text('Sohbeti Sil', style: TextStyle(color: Colors.red)),
-                                onTap: () async {
-                                  Navigator.pop(context);
-                                  final confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (context) => AlertDialog(
-                                      title: const Text('Sohbeti Sil'),
-                                      content: const Text('Bu sohbeti silmek istediğinize emin misiniz? Bu işlem geri alınamaz.'),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(context, false),
-                                          child: const Text('İptal'),
-                                        ),
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(context, true),
-                                          child: const Text('Sil', style: TextStyle(color: Colors.red)),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-
-                                  if (confirm == true && mounted) {
-                                    try {
-                                      await chatService.deleteChat(chat.id);
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(
-                                            content: Text('Sohbet silindi'),
-                                          ),
-                                        );
-                                      }
-                                    } catch (e) {
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Hata: $e'),
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  }
-                                },
-                              ),
-                            ],
+                          title: Text(title),
+                          subtitle: Text(
+                            chat.lastMessage ?? 'Henüz mesaj yok',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        );
-                      },
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        leading: CircleAvatar(
-                          radius: 28,
-                          backgroundColor: chat.isGroup ? Colors.blue : Colors.purple,
-                          child: chat.avatar != null
-                              ? ClipOval(
-                                  child: Image.network(
-                                    chat.avatar!,
-                                    width: 56,
-                                    height: 56,
-                                    fit: BoxFit.cover,
+                          trailing: chat.lastMessageTime != null
+                              ? Text(
+                                  _formatDate(chat.lastMessageTime!),
+                                  style: const TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 12,
                                   ),
                                 )
-                              : Icon(
-                                  chat.isGroup ? Icons.group : Icons.person,
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.more_vert),
-                          onPressed: () {
-                            showModalBottomSheet(
-                              context: context,
-                              builder: (context) => Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  ListTile(
-                                    leading: const Icon(Icons.notifications_off),
-                                    title: const Text('Sessize Al'),
-                                    onTap: () async {
-                                      try {
-                                        await chatService.toggleMuteChat(chat.id);
-                                        if (mounted) {
-                                          Navigator.pop(context);
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(
-                                              content: Text('Sohbet sessize alındı'),
-                                            ),
-                                          );
-                                        }
-                                      } catch (e) {
-                                        if (mounted) {
-                                          Navigator.pop(context);
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text('Hata: $e'),
-                                            ),
-                                          );
-                                        }
-                                      }
-                                    },
-                                  ),
-                                  ListTile(
-                                    leading: const Icon(Icons.delete, color: Colors.red),
-                                    title: const Text('Sohbeti Sil', style: TextStyle(color: Colors.red)),
-                                    onTap: () async {
-                                      Navigator.pop(context);
-                                      final confirm = await showDialog<bool>(
-                                        context: context,
-                                        builder: (context) => AlertDialog(
-                                          title: const Text('Sohbeti Sil'),
-                                          content: const Text('Bu sohbeti silmek istediğinize emin misiniz? Bu işlem geri alınamaz.'),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.pop(context, false),
-                                              child: const Text('İptal'),
-                                            ),
-                                            TextButton(
-                                              onPressed: () => Navigator.pop(context, true),
-                                              child: const Text('Sil', style: TextStyle(color: Colors.red)),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-
-                                      if (confirm == true && mounted) {
-                                        try {
-                                          await chatService.deleteChat(chat.id);
-                                          if (mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(
-                                                content: Text('Sohbet silindi'),
-                                              ),
-                                            );
-                                          }
-                                        } catch (e) {
-                                          if (mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text('Hata: $e'),
-                                              ),
-                                            );
-                                          }
-                                        }
-                                      }
-                                    },
-                                  ),
-                                ],
+                              : null,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChatDetailScreen(chat: chat),
                               ),
                             );
                           },
-                        ),
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    chat.name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  if (chat.isGroup && chat.participants.isNotEmpty)
-                                    Text(
-                                      '${chat.participants.length} katılımcı',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                            if (chat.lastMessageTime != null)
-                              Text(
-                                _formatTime(chat.lastMessageTime!),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                          ],
-                        ),
-                        subtitle: Row(
-                          children: [
-                            if (chat.isMuted)
-                              const Padding(
-                                padding: EdgeInsets.only(right: 4),
-                                child: Icon(Icons.notifications_off, size: 16, color: Colors.grey),
-                              ),
-                            Expanded(
-                              child: Text(
-                                chat.lastMessage ?? 'Henüz mesaj yok',
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                  fontSize: 14,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (chat.unreadCount > 0)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  chat.unreadCount.toString(),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-          if (_isLoading)
-            Container(
-              color: Colors.black.withOpacity(0.5),
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
             ),
-        ],
-      ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          showModalBottomSheet(
-            context: context,
-            builder: (context) => Container(
-              padding: const EdgeInsets.symmetric(vertical: 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Colors.purple,
-                      child: Icon(Icons.person_add, color: Colors.white),
-                    ),
-                    title: const Text('Yeni Sohbet'),
-                    subtitle: const Text('Bire bir sohbet başlat'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showNewChatDialog(context);
-                    },
-                  ),
-                  const Divider(),
-                  ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: Colors.blue,
-                      child: Icon(Icons.group_add, color: Colors.white),
-                    ),
-                    title: const Text('Yeni Grup'),
-                    subtitle: const Text('Grup sohbeti oluştur'),
-                    onTap: () {
-                      Navigator.pop(context);
-                      _showNewGroupDialog(context);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-        child: const Icon(Icons.add),
+        onPressed: () => _showNewChatDialog(context),
+        child: const Icon(Icons.chat),
+        tooltip: 'Yeni Sohbet',
       ),
     );
   }
 
-  String _formatTime(DateTime time) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final messageDate = DateTime(time.year, time.month, time.day);
-
-    if (messageDate == today) {
-      return '${time.hour}:${time.minute.toString().padLeft(2, '0')}';
-    } else if (messageDate == yesterday) {
-      return 'Dün';
-    } else if (now.difference(time).inDays < 7) {
-      switch (time.weekday) {
-        case 1:
-          return 'Pzt';
-        case 2:
-          return 'Sal';
-        case 3:
-          return 'Çar';
-        case 4:
-          return 'Per';
-        case 5:
-          return 'Cum';
-        case 6:
-          return 'Cmt';
-        case 7:
-          return 'Paz';
-        default:
-          return '';
-      }
+  Future<String> _getChatTitle(ChatModel chat, String currentUserId, UserService userService) async {
+    if (chat.isGroup) {
+      return chat.name;
     } else {
-      return '${time.day}/${time.month}/${time.year}';
+      // Birebir sohbetlerde diğer kullanıcının adını göster
+      final otherUserId = chat.participants.firstWhere(
+        (id) => id != currentUserId,
+        orElse: () => '',
+      );
+      if (otherUserId.isEmpty) return chat.name;
+      
+      final otherUser = await userService.getUserById(otherUserId);
+      return otherUser?.name ?? chat.name;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inDays == 0) {
+      return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } else if (difference.inDays == 1) {
+      return 'Dün';
+    } else if (difference.inDays < 7) {
+      final weekDays = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+      return weekDays[date.weekday - 1];
+    } else {
+      return '${date.day}/${date.month}/${date.year}';
     }
   }
 } 

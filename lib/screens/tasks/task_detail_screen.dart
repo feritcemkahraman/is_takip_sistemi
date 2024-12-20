@@ -256,9 +256,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                   const SizedBox(height: 8),
                                   _buildInfoRow(
                                     'Bitiş',
-                                    _formatDate(widget.task.deadline),
+                                    _formatDate(widget.task.deadline ?? DateTime.now()),
                                     Icons.event,
-                                    color: widget.task.deadline.isBefore(DateTime.now())
+                                    color: widget.task.deadline?.isBefore(DateTime.now()) ?? false
                                         ? Colors.red
                                         : null,
                                   ),
