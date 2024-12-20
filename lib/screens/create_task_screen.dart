@@ -161,12 +161,19 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
           throw Exception('Oturum açmış kullanıcı bulunamadı');
         }
 
-        // Dosyaları yerel olarak kaydet
-        List<String> attachmentPaths = [];
+        // Görevi oluştur
+        final taskId = await taskService.createTask(
+          title: _titleController.text.trim(),
+          description: _descriptionController.text.trim(),
+          assignedTo: _assignedTo!,
+          deadline: _selectedDate,
+          priority: _selectedPriority,
+        );
+
+        // Dosyaları kaydet
         if (_selectedFiles.isNotEmpty) {
           final localStorageService = LocalStorageService();
-          final taskId = DateTime.now().millisecondsSinceEpoch.toString();
-
+          final attachmentPaths = <String>[];
           for (var file in _selectedFiles) {
             if (file.path != null) {
               try {
@@ -190,18 +197,12 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
               }
             }
           }
-        }
 
-        // Görevi oluştur
-        await taskService.createTask(
-          title: _titleController.text,
-          description: _descriptionController.text,
-          assignedTo: _assignedTo!,
-          createdBy: currentUser.id,
-          deadline: _selectedDate,
-          priority: _selectedPriority,
-          attachments: attachmentPaths,
-        );
+          // Kaydedilen dosya yollarını göreve ekle
+          if (attachmentPaths.isNotEmpty) {
+            await taskService.addAttachments(taskId, attachmentPaths);
+          }
+        }
 
         if (mounted) {
           setState(() => _isLoading = false);

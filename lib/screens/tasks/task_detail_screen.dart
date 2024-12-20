@@ -57,6 +57,19 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         content: _commentController.text.trim(),
       );
 
+      // Yorum bildirimini gönder
+      if (currentUser.id != widget.task.assignedTo) {
+        await context.read<NotificationService>().sendNotification(
+          userId: widget.task.assignedTo,
+          title: 'Yeni Yorum',
+          body: '${currentUser.name} görevinize yorum yaptı: ${_commentController.text.trim()}',
+          data: {
+            'type': 'task_comment',
+            'taskId': widget.task.id,
+          },
+        );
+      }
+
       _commentController.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -86,6 +99,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       final file = File(result.files.single.path!);
       final fileName = result.files.single.name;
       final storageService = context.read<LocalStorageService>();
+      final currentUser = context.read<UserService>().currentUser;
+      if (currentUser == null) throw Exception('Kullanıcı oturumu bulunamadı');
       
       // Dosyayı local storage'a kaydet
       final savedFilePath = await storageService.saveTaskAttachment(
@@ -96,6 +111,19 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
       // Firestore'a dosya yolunu ekle
       await context.read<TaskService>().addAttachment(widget.task.id, savedFilePath);
+
+      // Dosya ekleme bildirimini gönder
+      if (currentUser.id != widget.task.assignedTo) {
+        await context.read<NotificationService>().sendNotification(
+          userId: widget.task.assignedTo,
+          title: 'Yeni Dosya',
+          body: '${currentUser.name} görevinize yeni bir dosya ekledi: $fileName',
+          data: {
+            'type': 'task_attachment',
+            'taskId': widget.task.id,
+          },
+        );
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -147,10 +175,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       if (filePath.toLowerCase().endsWith('.jpg') ||
           filePath.toLowerCase().endsWith('.jpeg') ||
           filePath.toLowerCase().endsWith('.png')) {
-        // Firebase Storage referansını al
-        final storageRef = FirebaseStorage.instance.ref().child(filePath);
-        // Görsel URL'ini al
-        final imageUrl = await storageRef.getDownloadURL();
+        
+        // Local storage'dan dosyayı al
+        final file = await context.read<LocalStorageService>().getTaskAttachment(filePath);
+        if (file == null) throw Exception('Dosya bulunamadı');
         
         if (mounted) {
           showDialog(
@@ -172,22 +200,11 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                       boundaryMargin: const EdgeInsets.all(20),
                       minScale: 0.5,
                       maxScale: 4,
-                      child: Image.network(
-                        imageUrl,
+                      child: Image.file(
+                        file,
                         errorBuilder: (context, error, stackTrace) {
                           return const Center(
                             child: Text('Görsel yüklenemedi'),
-                          );
-                        },
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Center(
-                            child: CircularProgressIndicator(
-                              value: loadingProgress.expectedTotalBytes != null
-                                  ? loadingProgress.cumulativeBytesLoaded /
-                                      loadingProgress.expectedTotalBytes!
-                                  : null,
-                            ),
                           );
                         },
                       ),
@@ -217,6 +234,63 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
+  // Görev tamamlama işlemi
+  Future<void> _completeTask() async {
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Görevi Tamamla'),
+          content: const Text('Bu görevi tamamlandı olarak işaretlemek istediğinize emin misiniz?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('İptal'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Tamamla'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        await context.read<TaskService>().completeTask(widget.task.id);
+        
+        // Görev tamamlama bildirimini gönder
+        final currentUser = context.read<UserService>().currentUser;
+        if (currentUser != null) {
+          final assignedUser = await context.read<UserService>().getUserById(widget.task.assignedTo);
+          if (assignedUser != null) {
+            await context.read<NotificationService>().sendNotification(
+              userId: widget.task.createdBy,
+              title: 'Görev Tamamlandı',
+              body: '${assignedUser.name} görevi tamamladı: ${widget.task.title}',
+              data: {
+                'type': 'task_completed',
+                'taskId': widget.task.id,
+              },
+            );
+          }
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Görev tamamlandı olarak işaretlendi')),
+          );
+          Navigator.pop(context);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Hata: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final userService = context.watch<UserService>();
@@ -228,50 +302,30 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         actions: [
           if (widget.canInteract && widget.task.status != 'completed' && 
               currentUser?.id == widget.task.assignedTo)
-            TextButton.icon(
-              icon: const Icon(Icons.check_circle, color: Colors.white),
-              label: const Text(
-                'Tamamlandı',
-                style: TextStyle(color: Colors.white),
+            Container(
+              margin: const EdgeInsets.only(right: 16),
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                icon: const Icon(
+                  Icons.check_circle,
+                  size: 24,
+                ),
+                label: const Text(
+                  'Tamamlandı',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                onPressed: _completeTask,
               ),
-              onPressed: () async {
-                try {
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Görevi Tamamla'),
-                      content: const Text('Bu görevi tamamlandı olarak işaretlemek istediğinize emin misiniz?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('İptal'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Tamamla'),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (confirmed == true) {
-                    await context.read<TaskService>().completeTask(widget.task.id);
-                    
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Görev tamamlandı olarak işaretlendi')),
-                      );
-                      Navigator.pop(context); // Görev detay ekranından çık
-                    }
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Hata: $e')),
-                    );
-                  }
-                }
-              },
             ),
         ],
       ),
@@ -586,75 +640,91 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                 itemBuilder: (context, index) {
                                   final comment = comments[index];
                                   return FutureBuilder<UserModel?>(
-                                    future: context.read<UserService>().getUserById(comment.userId),
+                                    future: userService.getUserById(comment.userId),
                                     builder: (context, userSnapshot) {
                                       final user = userSnapshot.data;
-                                      return Card(
-                                        margin: const EdgeInsets.only(bottom: 8),
-                                        child: ListTile(
-                                          leading: CircleAvatar(
-                                            child: Text(
-                                              user?.name.substring(0, 1).toUpperCase() ?? '?',
-                                            ),
-                                          ),
-                                          title: Row(
-                                            children: [
-                                              Text(
-                                                user?.name ?? 'Yükleniyor...',
-                                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                      final isCurrentUser = currentUser?.id == comment.userId;
+                                      
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                                        child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisAlignment: isCurrentUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+                                          children: [
+                                            if (!isCurrentUser) ...[
+                                              CircleAvatar(
+                                                backgroundColor: Theme.of(context).primaryColor,
+                                                child: Text(
+                                                  user?.name.substring(0, 1).toUpperCase() ?? '?',
+                                                  style: const TextStyle(color: Colors.white),
+                                                ),
                                               ),
                                               const SizedBox(width: 8),
-                                              Text(
-                                                _formatDate(comment.createdAt),
-                                                style: Theme.of(context).textTheme.bodySmall,
+                                            ],
+                                            Flexible(
+                                              child: Container(
+                                                padding: const EdgeInsets.all(12),
+                                                decoration: BoxDecoration(
+                                                  color: isCurrentUser 
+                                                      ? Theme.of(context).primaryColor.withOpacity(0.2)
+                                                      : Colors.grey[200],
+                                                  borderRadius: BorderRadius.only(
+                                                    topLeft: const Radius.circular(16),
+                                                    topRight: const Radius.circular(16),
+                                                    bottomLeft: Radius.circular(isCurrentUser ? 16 : 4),
+                                                    bottomRight: Radius.circular(isCurrentUser ? 4 : 16),
+                                                  ),
+                                                ),
+                                                child: Column(
+                                                  crossAxisAlignment: isCurrentUser 
+                                                      ? CrossAxisAlignment.end 
+                                                      : CrossAxisAlignment.start,
+                                                  children: [
+                                                    Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Text(
+                                                          user?.name ?? 'Yükleniyor...',
+                                                          style: TextStyle(
+                                                            fontWeight: FontWeight.bold,
+                                                            color: isCurrentUser 
+                                                                ? Theme.of(context).primaryColor
+                                                                : Colors.black87,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        Text(
+                                                          _formatDate(comment.createdAt),
+                                                          style: TextStyle(
+                                                            color: Colors.grey[600],
+                                                            fontSize: 12,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 4),
+                                                    Text(
+                                                      comment.content,
+                                                      style: const TextStyle(
+                                                        fontSize: 14,
+                                                        height: 1.3,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            if (isCurrentUser) ...[
+                                              const SizedBox(width: 8),
+                                              CircleAvatar(
+                                                backgroundColor: Theme.of(context).primaryColor,
+                                                child: Text(
+                                                  user?.name.substring(0, 1).toUpperCase() ?? '?',
+                                                  style: const TextStyle(color: Colors.white),
+                                                ),
                                               ),
                                             ],
-                                          ),
-                                          subtitle: Text(comment.content),
-                                          trailing: comment.userId == currentUser?.id
-                                              ? IconButton(
-                                                  icon: const Icon(Icons.delete_outline),
-                                                  onPressed: () async {
-                                                    final confirmed = await showDialog<bool>(
-                                                      context: context,
-                                                      builder: (context) => AlertDialog(
-                                                        title: const Text('Yorumu Sil'),
-                                                        content: const Text('Bu yorumu silmek istediğinize emin misiniz?'),
-                                                        actions: [
-                                                          TextButton(
-                                                            onPressed: () => Navigator.pop(context, false),
-                                                            child: const Text('İptal'),
-                                                          ),
-                                                          TextButton(
-                                                            onPressed: () => Navigator.pop(context, true),
-                                                            child: const Text('Sil'),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    );
-
-                                                    if (confirmed == true) {
-                                                      try {
-                                                        await context.read<TaskService>().deleteComment(
-                                                          taskId: widget.task.id,
-                                                          commentId: comment.id,
-                                                        );
-                                                        if (mounted) {
-                                                          ScaffoldMessenger.of(context).showSnackBar(
-                                                            const SnackBar(content: Text('Yorum silindi')),
-                                                          );
-                                                        }
-                                                      } catch (e) {
-                                                        if (mounted) {
-                                                          ScaffoldMessenger.of(context).showSnackBar(
-                                                            SnackBar(content: Text('Hata: $e')),
-                                                          );
-                                                        }
-                                                      }
-                                                    }
-                                                  },
-                                                )
-                                              : null,
+                                          ],
                                         ),
                                       );
                                     },

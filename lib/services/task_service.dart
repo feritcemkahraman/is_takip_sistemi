@@ -1,11 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/task_model.dart';
 import '../models/comment_model.dart';
 import '../services/local_storage_service.dart';
+import '../services/notification_service.dart';
+import '../services/user_service.dart';
 
 class TaskService with ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final String _collection = 'tasks';
 
   // Tüm görevleri getir
@@ -76,31 +80,48 @@ class TaskService with ChangeNotifier {
   }
 
   // Yeni görev oluştur
-  Future<void> createTask({
+  Future<String> createTask({
     required String title,
     required String description,
     required String assignedTo,
-    required String createdBy,
     required DateTime deadline,
     required int priority,
-    List<String> attachments = const [],
-    Map<String, dynamic> metadata = const {},
   }) async {
     try {
-      await _firestore.collection(_collection).add({
+      final currentUser = _auth.currentUser;
+      if (currentUser == null) throw Exception('Kullanıcı oturumu bulunamadı');
+
+      final task = await _firestore.collection(_collection).add({
         'title': title,
         'description': description,
         'assignedTo': assignedTo,
-        'createdBy': createdBy,
-        'createdAt': FieldValue.serverTimestamp(),
+        'createdBy': currentUser.uid,
         'deadline': deadline,
-        'completedAt': null,
-        'status': 'active', // Direkt aktif olarak oluştur
         'priority': priority,
-        'attachments': attachments,
-        'metadata': metadata,
+        'status': 'active',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'attachments': [],
       });
-      notifyListeners();
+
+      // Görev atama bildirimi gönder
+      final notificationService = NotificationService();
+      final userService = UserService();
+      final creator = await userService.getUserById(currentUser.uid);
+      
+      if (creator != null) {
+        await notificationService.sendNotification(
+          userId: assignedTo,
+          title: 'Yeni Görev',
+          body: '${creator.name} size yeni bir görev atadı: $title',
+          data: {
+            'type': 'task_assigned',
+            'taskId': task.id,
+          },
+        );
+      }
+
+      return task.id;
     } catch (e) {
       print('Error creating task: $e');
       rethrow;
@@ -260,6 +281,28 @@ class TaskService with ChangeNotifier {
       });
     } catch (e) {
       throw Exception('Dosya eklenirken hata oluştu: $e');
+    }
+  }
+
+  // Göreve toplu dosya ekle
+  Future<void> addAttachments(String taskId, List<String> filePaths) async {
+    try {
+      final taskRef = _firestore.collection(_collection).doc(taskId);
+      final task = await taskRef.get();
+      
+      if (!task.exists) {
+        throw Exception('Görev bulunamadı');
+      }
+
+      final currentAttachments = List<String>.from(task.data()?['attachments'] ?? []);
+      currentAttachments.addAll(filePaths);
+
+      await taskRef.update({
+        'attachments': currentAttachments,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Dosyalar eklenirken hata oluştu: $e');
     }
   }
 
