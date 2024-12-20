@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
-import '../services/user_service.dart';
-import '../services/chat_service.dart';
-import '../screens/chat_detail_screen.dart';
 
 class UserSearchDelegate extends SearchDelegate<UserModel?> {
-  final UserService userService;
-  final ChatService chatService;
+  final List<UserModel> users;
+  final String currentUserId;
 
   UserSearchDelegate({
-    required this.userService,
-    required this.chatService,
+    required this.users,
+    required this.currentUserId,
   });
 
   @override
@@ -37,81 +34,39 @@ class UserSearchDelegate extends SearchDelegate<UserModel?> {
 
   @override
   Widget buildResults(BuildContext context) {
-    return _buildSearchResults(context);
+    return _buildSearchResults();
   }
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    return _buildSearchResults(context);
+    return _buildSearchResults();
   }
 
-  Widget _buildSearchResults(BuildContext context) {
-    if (query.isEmpty) {
-      return const Center(
-        child: Text('Kullanıcı aramak için yazın'),
-      );
-    }
+  Widget _buildSearchResults() {
+    final filteredUsers = users.where((user) {
+      if (user.id == currentUserId) return false;
+      
+      final queryLower = query.toLowerCase();
+      final nameLower = user.name.toLowerCase();
+      final departmentLower = user.department.toLowerCase();
+      
+      return nameLower.contains(queryLower) || 
+             departmentLower.contains(queryLower);
+    }).toList();
 
-    return FutureBuilder<List<UserModel>>(
-      future: userService.searchUsers(query),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (snapshot.hasError) {
-          return Center(child: Text('Hata: ${snapshot.error}'));
-        }
-
-        final users = snapshot.data ?? [];
-        final currentUser = userService.currentUser;
-
-        if (users.isEmpty) {
-          return const Center(
-            child: Text('Kullanıcı bulunamadı'),
-          );
-        }
-
-        return ListView.builder(
-          itemCount: users.length,
-          itemBuilder: (context, index) {
-            final user = users[index];
-            if (user.id == currentUser?.id) return const SizedBox.shrink();
-
-            return ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Theme.of(context).primaryColor,
-                child: Text(
-                  user.name[0].toUpperCase(),
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-              title: Text(user.name),
-              subtitle: Text(user.department),
-              onTap: () async {
-                try {
-                  final chat = await chatService.createChat(
-                    name: user.name,
-                    participants: [user.id],
-                  );
-
-                  if (context.mounted) {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ChatDetailScreen(chat: chat),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Hata: $e')),
-                    );
-                  }
-                }
-              },
-            );
+    return ListView.builder(
+      itemCount: filteredUsers.length,
+      itemBuilder: (context, index) {
+        final user = filteredUsers[index];
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundColor: Theme.of(context).primaryColor,
+            child: Text(user.name[0].toUpperCase()),
+          ),
+          title: Text(user.name),
+          subtitle: Text(user.department),
+          onTap: () {
+            close(context, user);
           },
         );
       },

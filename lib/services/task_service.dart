@@ -105,8 +105,8 @@ class TaskService with ChangeNotifier {
       });
 
       // Görev atama bildirimi gönder
-      final notificationService = NotificationService();
       final userService = UserService();
+      final notificationService = NotificationService(userService: userService);
       final creator = await userService.getUserById(currentUser.uid);
       
       if (creator != null) {
@@ -160,17 +160,28 @@ class TaskService with ChangeNotifier {
   }
 
   // Görevi tamamla
-  Future<bool> completeTask(String id) async {
+  Future<void> completeTask(String taskId) async {
     try {
-      await _firestore.collection(_collection).doc(id).update({
+      final userService = UserService();
+      final notificationService = NotificationService(userService: userService);
+      
+      await _firestore.collection('tasks').doc(taskId).update({
         'status': 'completed',
-        'completedAt': Timestamp.now(),
+        'completedAt': FieldValue.serverTimestamp(),
       });
-      notifyListeners();
-      return true;
+
+      // Bildirim gönder
+      final task = await getTask(taskId);
+      if (task != null) {
+        await notificationService.sendNotification(
+          userId: task.createdBy,
+          title: 'Görev Tamamlandı',
+          body: '${task.title} görevi tamamlandı',
+        );
+      }
     } catch (e) {
-      print('Error completing task: $e');
-      return false;
+      print('Görev tamamlama hatası: $e');
+      rethrow;
     }
   }
 
@@ -379,5 +390,16 @@ class TaskService with ChangeNotifier {
         .map((snapshot) => snapshot.docs
             .map((doc) => TaskModel.fromFirestore(doc))
             .toList());
+  }
+
+  Future<TaskModel?> getTask(String taskId) async {
+    try {
+      final doc = await _firestore.collection(_collection).doc(taskId).get();
+      if (!doc.exists) return null;
+      return TaskModel.fromFirestore(doc);
+    } catch (e) {
+      print('Error getting task: $e');
+      return null;
+    }
   }
 }

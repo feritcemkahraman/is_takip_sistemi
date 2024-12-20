@@ -109,4 +109,10 @@ class UserService extends ChangeNotifier {
             .map((doc) => UserModel.fromFirestore(doc))
             .toList());
   }
+
+  Future<void> updateFcmToken(String userId, String? token) async {
+    await _firestore.collection('users').doc(userId).update({
+      'fcmToken': token,
+    });
+  }
 }

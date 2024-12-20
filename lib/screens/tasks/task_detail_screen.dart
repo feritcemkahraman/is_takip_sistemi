@@ -99,8 +99,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       final file = File(result.files.single.path!);
       final fileName = result.files.single.name;
       final storageService = context.read<LocalStorageService>();
-      final currentUser = context.read<UserService>().currentUser;
-      if (currentUser == null) throw Exception('Kullanıcı oturumu bulunamadı');
       
       // Dosyayı local storage'a kaydet
       final savedFilePath = await storageService.saveTaskAttachment(
@@ -111,19 +109,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
       // Firestore'a dosya yolunu ekle
       await context.read<TaskService>().addAttachment(widget.task.id, savedFilePath);
-
-      // Dosya ekleme bildirimini gönder
-      if (currentUser.id != widget.task.assignedTo) {
-        await context.read<NotificationService>().sendNotification(
-          userId: widget.task.assignedTo,
-          title: 'Yeni Dosya',
-          body: '${currentUser.name} görevinize yeni bir dosya ekledi: $fileName',
-          data: {
-            'type': 'task_attachment',
-            'taskId': widget.task.id,
-          },
-        );
-      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -289,6 +274,26 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         );
       }
     }
+  }
+
+  Future<void> _addAttachment() async {
+    final result = await FilePicker.platform.pickFiles();
+    if (result == null) return;
+
+    final file = File(result.files.first.path!);
+    final fileName = result.files.first.name;
+
+    final storageService = context.read<LocalStorageService>();
+    final savedFilePath = await storageService.saveTaskAttachment(
+      widget.task.id,
+      fileName,
+      file,
+    );
+
+    await context.read<TaskService>().addAttachment(
+      widget.task.id,
+      savedFilePath,
+    );
   }
 
   @override

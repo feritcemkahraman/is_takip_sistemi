@@ -14,6 +14,7 @@ class UserModel {
   final String? title;
   final DateTime? lastLoginAt;
   final Map<String, dynamic> metadata;
+  final String? fcmToken;
 
   static const String roleAdmin = 'admin';
   static const String roleUser = 'user';
@@ -32,6 +33,7 @@ class UserModel {
     this.title,
     this.lastLoginAt,
     this.metadata = const {},
+    this.fcmToken,
   });
 
   Map<String, dynamic> toMap() {
@@ -47,6 +49,7 @@ class UserModel {
       'title': title,
       'lastLoginAt': lastLoginAt?.toIso8601String(),
       'metadata': metadata,
+      'fcmToken': fcmToken,
     };
   }
 
@@ -70,6 +73,7 @@ class UserModel {
               : DateTime.parse(map['lastLoginAt'])
           : null,
       metadata: Map<String, dynamic>.from(map['metadata'] ?? {}),
+      fcmToken: map['fcmToken'],
     );
   }
 
@@ -91,6 +95,7 @@ class UserModel {
     DateTime? createdAt,
     DateTime? lastLoginAt,
     Map<String, dynamic>? metadata,
+    String? fcmToken,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -105,6 +110,7 @@ class UserModel {
       createdAt: createdAt ?? this.createdAt,
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       metadata: metadata ?? this.metadata,
+      fcmToken: fcmToken ?? this.fcmToken,
     );
   }
 

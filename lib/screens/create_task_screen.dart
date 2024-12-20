@@ -120,28 +120,25 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
     }
   }
 
-  Future<void> _pickFiles() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        allowMultiple: true,
-        type: FileType.any,
-      );
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles();
+    if (result == null) return;
 
-      if (result != null) {
-        setState(() {
-          _selectedFiles = result.files;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Dosya seçilirken hata oluştu: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+    final file = File(result.files.first.path!);
+    final fileName = result.files.first.name;
+
+    final localStorageService = context.read<LocalStorageService>();
+    final taskId = DateTime.now().millisecondsSinceEpoch.toString();
+    
+    final savedPath = await localStorageService.saveTaskAttachment(
+      taskId,
+      fileName,
+      file,
+    );
+
+    setState(() {
+      _selectedFiles.add(result.files.first);
+    });
   }
 
   Future<void> _createTask() async {
@@ -404,7 +401,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                   borderRadius: BorderRadius.circular(8),
                   side: BorderSide(color: Colors.grey[300]!),
                 ),
-                onTap: _pickFiles,
+                onTap: _pickFile,
               ),
               if (_selectedFiles.isNotEmpty) ...[
                 const SizedBox(height: 8),

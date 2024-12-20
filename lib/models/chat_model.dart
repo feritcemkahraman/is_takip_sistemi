@@ -5,54 +5,53 @@ class ChatModel {
   final String id;
   final String name;
   final List<String> participants;
-  final List<MessageModel> messages;
-  final bool isGroup;
-  final String? avatar;
   final String createdBy;
-  final List<String> mutedBy;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final bool isGroup;
+  final List<String> mutedBy;
+  final List<MessageModel> messages;
   final MessageModel? lastMessage;
+  final int unreadCount;
+  final String? avatar;
 
   ChatModel({
     required this.id,
     required this.name,
     required this.participants,
-    required this.messages,
-    required this.isGroup,
-    this.avatar,
     required this.createdBy,
-    required this.mutedBy,
     required this.createdAt,
     required this.updatedAt,
+    required this.isGroup,
+    required this.mutedBy,
+    required this.messages,
     this.lastMessage,
+    this.unreadCount = 0,
+    this.avatar,
   });
 
   factory ChatModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-    final messages = (data['messages'] as List<dynamic>? ?? [])
-        .map((msg) => MessageModel.fromMap(msg as Map<String, dynamic>))
-        .toList();
-
-    // Son mesajı bul
-    MessageModel? lastMessage;
-    if (messages.isNotEmpty) {
-      messages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      lastMessage = messages.first;
-    }
-
     return ChatModel(
       id: doc.id,
       name: data['name'] as String,
-      participants: List<String>.from(data['participants'] ?? []),
-      messages: messages,
-      isGroup: data['isGroup'] as bool? ?? false,
-      avatar: data['avatar'] as String?,
+      participants: List<String>.from(data['participants'] as List),
       createdBy: data['createdBy'] as String,
-      mutedBy: List<String>.from(data['mutedBy'] ?? []),
       createdAt: (data['createdAt'] as Timestamp).toDate(),
       updatedAt: (data['updatedAt'] as Timestamp).toDate(),
-      lastMessage: lastMessage,
+      isGroup: data['isGroup'] as bool? ?? false,
+      mutedBy: List<String>.from(data['mutedBy'] as List? ?? []),
+      messages: (data['messages'] as List<dynamic>? ?? [])
+          .map((msg) => MessageModel.fromMap(msg as Map<String, dynamic>, doc.id))
+          .toList(),
+      lastMessage: data['lastMessage'] != null
+          ? MessageModel.fromMap(
+              data['lastMessage'] as Map<String, dynamic>,
+              doc.id,
+            )
+          : null,
+      unreadCount: data['unreadCount'] as int? ?? 0,
+      avatar: data['avatar'] as String?,
     );
   }
 
@@ -60,13 +59,29 @@ class ChatModel {
     return {
       'name': name,
       'participants': participants,
-      'messages': messages.map((msg) => msg.toMap()).toList(),
-      'isGroup': isGroup,
-      'avatar': avatar,
       'createdBy': createdBy,
-      'mutedBy': mutedBy,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      'isGroup': isGroup,
+      'mutedBy': mutedBy,
+      'messages': messages.map((msg) => msg.toMap()).toList(),
+      'lastMessage': lastMessage?.toMap(),
+      'unreadCount': unreadCount,
+      'avatar': avatar,
+    };
+  }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'id': id,
+      'name': name,
+      'participants': participants,
+      'createdBy': createdBy,
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+      'isGroup': isGroup,
+      'mutedBy': mutedBy,
+      'messages': messages.map((m) => m.toMap()).toList(),
     };
   }
 
@@ -74,27 +89,29 @@ class ChatModel {
     String? id,
     String? name,
     List<String>? participants,
-    List<MessageModel>? messages,
-    bool? isGroup,
-    String? avatar,
     String? createdBy,
-    List<String>? mutedBy,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool? isGroup,
+    List<String>? mutedBy,
+    List<MessageModel>? messages,
     MessageModel? lastMessage,
+    int? unreadCount,
+    String? avatar,
   }) {
     return ChatModel(
       id: id ?? this.id,
       name: name ?? this.name,
       participants: participants ?? this.participants,
-      messages: messages ?? this.messages,
-      isGroup: isGroup ?? this.isGroup,
-      avatar: avatar ?? this.avatar,
       createdBy: createdBy ?? this.createdBy,
-      mutedBy: mutedBy ?? this.mutedBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      isGroup: isGroup ?? this.isGroup,
+      mutedBy: mutedBy ?? this.mutedBy,
+      messages: messages ?? this.messages,
       lastMessage: lastMessage ?? this.lastMessage,
+      unreadCount: unreadCount ?? this.unreadCount,
+      avatar: avatar ?? this.avatar,
     );
   }
 } 
