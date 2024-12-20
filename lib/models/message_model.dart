@@ -8,72 +8,60 @@ class MessageModel {
   static const String typeVideo = 'video';
 
   final String id;
-  final String chatId;
   final String senderId;
   final String content;
-  final String? attachment;
   final DateTime createdAt;
-  final bool isRead;
+  final List<String> readBy;
+  final String? attachmentUrl;
   final String type;
-  final bool isDeleted;
-  final bool isSystemMessage;
 
   MessageModel({
     required this.id,
-    required this.chatId,
     required this.senderId,
     required this.content,
-    this.attachment,
     required this.createdAt,
-    this.isRead = false,
-    this.type = 'text',
-    this.isDeleted = false,
-    this.isSystemMessage = false,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'chatId': chatId,
-      'senderId': senderId,
-      'content': content,
-      'attachment': attachment,
-      'createdAt': createdAt,
-      'isRead': isRead,
-      'type': type,
-      'isDeleted': isDeleted,
-      'isSystemMessage': isSystemMessage,
-    };
-  }
+    List<String>? readBy,
+    this.attachmentUrl,
+    this.type = typeText,
+  }) : readBy = readBy ?? [];
 
   factory MessageModel.fromMap(Map<String, dynamic> map) {
     return MessageModel(
       id: map['id'] ?? '',
-      chatId: map['chatId'] ?? '',
       senderId: map['senderId'] ?? '',
       content: map['content'] ?? '',
-      attachment: map['attachment'],
-      createdAt: (map['createdAt'] as Timestamp).toDate(),
-      isRead: map['isRead'] ?? false,
-      type: map['type'] ?? 'text',
-      isDeleted: map['isDeleted'] ?? false,
-      isSystemMessage: map['isSystemMessage'] ?? false,
+      createdAt: (map['timestamp'] ?? map['createdAt'] as Timestamp).toDate(),
+      readBy: List<String>.from(map['readBy'] ?? []),
+      attachmentUrl: map['attachmentUrl'],
+      type: map['type'] ?? typeText,
     );
   }
 
-  factory MessageModel.fromFirestore(dynamic doc) {
+  factory MessageModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return MessageModel(
       id: doc.id,
-      chatId: data['chatId'] ?? '',
       senderId: data['senderId'] ?? '',
       content: data['content'] ?? '',
+      createdAt: (data['timestamp'] ?? data['createdAt'] as Timestamp).toDate(),
+      readBy: List<String>.from(data['readBy'] ?? []),
+      attachmentUrl: data['attachmentUrl'],
       type: data['type'] ?? typeText,
-      createdAt: (data['timestamp'] ?? data['createdAt'])?.toDate() ?? DateTime.now(),
-      isRead: data['isRead'] ?? false,
-      attachment: data['attachment'],
-      isDeleted: data['isDeleted'] ?? false,
-      isSystemMessage: data['isSystemMessage'] ?? false,
     );
   }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'senderId': senderId,
+      'content': content,
+      'timestamp': Timestamp.fromDate(createdAt),
+      'createdAt': Timestamp.fromDate(createdAt),
+      'readBy': readBy,
+      'attachmentUrl': attachmentUrl,
+      'type': type,
+    };
+  }
+
+  DateTime get timestamp => createdAt;
 } 

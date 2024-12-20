@@ -111,13 +111,6 @@ class _ChatInfoScreenState extends State<ChatInfoScreen> {
                             fontSize: 14,
                           ),
                         ),
-                        if (widget.chat.description != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            widget.chat.description!,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ],
                       ],
                     ),
                   ),
@@ -142,13 +135,80 @@ class _ChatInfoScreenState extends State<ChatInfoScreen> {
                         itemCount: _participants.length,
                         itemBuilder: (context, index) {
                           final user = _participants[index];
-                          return UserListTile(
-                            user: user,
-                            isCreator: user.id == widget.chat.createdBy,
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.purple,
+                              child: Text(user.name[0].toUpperCase()),
+                            ),
+                            title: Text(user.name),
+                            subtitle: Text(user.department),
+                            trailing: user.id == widget.chat.createdBy
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Text(
+                                      'Oluşturan',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  )
+                                : null,
                           );
                         },
                       ),
                     ],
+                  ),
+                ),
+
+                // Sohbetten Ayrıl
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: ElevatedButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () async {
+                            setState(() => _isLoading = true);
+                            try {
+                              await _chatService.leaveChat(widget.chat.id);
+                              if (mounted) {
+                                Navigator.of(context).pop();
+                                Navigator.of(context).pop();
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Hata: $e')),
+                                );
+                              }
+                            } finally {
+                              if (mounted) {
+                                setState(() => _isLoading = false);
+                              }
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Text('Sohbetten Ayrıl'),
                   ),
                 ),
               ],

@@ -1,81 +1,100 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/user_service.dart';
+import 'message_model.dart';
 
 class ChatModel {
   final String id;
   final String name;
   final List<String> participants;
-  final String createdBy;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-  final String? lastMessage;
-  final DateTime? lastMessageTime;
-  final int unreadCount;
+  final List<MessageModel> messages;
   final bool isGroup;
   final String? avatar;
-  final String? description;
+  final String createdBy;
   final List<String> mutedBy;
-  final UserService _userService;
-
-  bool get isMuted => mutedBy.contains(_userService.currentUser?.id);
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final MessageModel? lastMessage;
 
   ChatModel({
     required this.id,
     required this.name,
     required this.participants,
+    required this.messages,
+    required this.isGroup,
+    this.avatar,
     required this.createdBy,
+    required this.mutedBy,
     required this.createdAt,
     required this.updatedAt,
-    required UserService userService,
     this.lastMessage,
-    this.lastMessageTime,
-    this.unreadCount = 0,
-    this.isGroup = false,
-    this.avatar,
-    this.description,
-    this.mutedBy = const [],
-  }) : _userService = userService;
+  });
+
+  factory ChatModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    final messages = (data['messages'] as List<dynamic>? ?? [])
+        .map((msg) => MessageModel.fromMap(msg as Map<String, dynamic>))
+        .toList();
+
+    // Son mesajı bul
+    MessageModel? lastMessage;
+    if (messages.isNotEmpty) {
+      messages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      lastMessage = messages.first;
+    }
+
+    return ChatModel(
+      id: doc.id,
+      name: data['name'] as String,
+      participants: List<String>.from(data['participants'] ?? []),
+      messages: messages,
+      isGroup: data['isGroup'] as bool? ?? false,
+      avatar: data['avatar'] as String?,
+      createdBy: data['createdBy'] as String,
+      mutedBy: List<String>.from(data['mutedBy'] ?? []),
+      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      updatedAt: (data['updatedAt'] as Timestamp).toDate(),
+      lastMessage: lastMessage,
+    );
+  }
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
       'name': name,
       'participants': participants,
-      'createdBy': createdBy,
-      'createdAt': createdAt,
-      'updatedAt': updatedAt,
-      'lastMessage': lastMessage,
-      'lastMessageTime': lastMessageTime,
-      'unreadCount': unreadCount,
+      'messages': messages.map((msg) => msg.toMap()).toList(),
       'isGroup': isGroup,
       'avatar': avatar,
-      'description': description,
+      'createdBy': createdBy,
       'mutedBy': mutedBy,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
 
-  factory ChatModel.fromMap(Map<String, dynamic> map, {required UserService userService}) {
+  ChatModel copyWith({
+    String? id,
+    String? name,
+    List<String>? participants,
+    List<MessageModel>? messages,
+    bool? isGroup,
+    String? avatar,
+    String? createdBy,
+    List<String>? mutedBy,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    MessageModel? lastMessage,
+  }) {
     return ChatModel(
-      id: map['id'] ?? '',
-      name: map['name'] ?? '',
-      participants: List<String>.from(map['participants'] ?? []),
-      createdBy: map['createdBy'] ?? '',
-      createdAt: map['createdAt'] is Timestamp 
-          ? (map['createdAt'] as Timestamp).toDate()
-          : DateTime.now(),
-      updatedAt: map['updatedAt'] is Timestamp
-          ? (map['updatedAt'] as Timestamp).toDate()
-          : DateTime.now(),
-      lastMessage: map['lastMessage'],
-      lastMessageTime: map['lastMessageTime'] is Timestamp
-          ? (map['lastMessageTime'] as Timestamp).toDate()
-          : null,
-      unreadCount: map['unreadCount'] ?? 0,
-      isGroup: map['isGroup'] ?? false,
-      avatar: map['avatar'],
-      description: map['description'],
-      mutedBy: List<String>.from(map['mutedBy'] ?? []),
-      userService: userService,
+      id: id ?? this.id,
+      name: name ?? this.name,
+      participants: participants ?? this.participants,
+      messages: messages ?? this.messages,
+      isGroup: isGroup ?? this.isGroup,
+      avatar: avatar ?? this.avatar,
+      createdBy: createdBy ?? this.createdBy,
+      mutedBy: mutedBy ?? this.mutedBy,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      lastMessage: lastMessage ?? this.lastMessage,
     );
   }
 } 

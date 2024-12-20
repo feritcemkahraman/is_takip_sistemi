@@ -247,137 +247,312 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final chatService = Provider.of<ChatService>(context);
-    final userService = Provider.of<UserService>(context);
-    final currentUser = userService.currentUser;
-    final isAdmin = currentUser?.role == 'admin';
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sohbetler'),
+  Future<void> _deleteChat(BuildContext context, ChatModel chat) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sohbeti Sil'),
+        content: const Text('Bu sohbeti silmek istediğinizden emin misiniz?'),
         actions: [
-          if (isAdmin)
-            IconButton(
-              icon: const Icon(Icons.group_add),
-              onPressed: () => _showNewGroupDialog(context),
-            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Sil'),
+          ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : StreamBuilder<List<ChatModel>>(
-              stream: chatService.getUserChats(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+    );
 
-                if (snapshot.hasError) {
-                  return Center(child: Text('Hata: ${snapshot.error}'));
-                }
+    if (confirm == true && context.mounted) {
+      try {
+        await context.read<ChatService>().deleteChat(chat.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Sohbet silindi')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Hata: $e')),
+          );
+        }
+      }
+    }
+  }
 
-                final chats = snapshot.data ?? [];
-
-                if (chats.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text('Henüz hiç sohbetiniz yok'),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: () => _showNewChatDialog(context),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Yeni Sohbet Başlat'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  itemCount: chats.length,
-                  itemBuilder: (context, index) {
-                    final chat = chats[index];
-                    return FutureBuilder<String>(
-                      future: _getChatTitle(chat, currentUser?.id ?? '', userService),
+  Widget _buildChatTile(BuildContext context, ChatModel chat) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: CircleAvatar(
+          radius: 24,
+          backgroundColor: chat.isGroup ? Colors.blue : Colors.purple,
+          child: chat.avatar != null
+              ? ClipOval(
+                  child: Image.network(
+                    chat.avatar!,
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.cover,
+                  ),
+                )
+              : Icon(
+                  chat.isGroup ? Icons.group : Icons.person,
+                  color: Colors.white,
+                  size: 24,
+                ),
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                chat.name,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            if (chat.lastMessage != null)
+              Text(
+                _formatDate(chat.lastMessage!.createdAt),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+          ],
+        ),
+        subtitle: Row(
+          children: [
+            Expanded(
+              child: chat.lastMessage != null
+                  ? FutureBuilder<UserModel?>(
+                      future: context.read<UserService>().getUserById(chat.lastMessage!.senderId),
                       builder: (context, snapshot) {
-                        final title = snapshot.data ?? 'Yükleniyor...';
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: chat.isGroup ? Colors.green : Colors.blue,
-                            child: Icon(
-                              chat.isGroup ? Icons.group : Icons.person,
-                              color: Colors.white,
-                            ),
+                        final sender = snapshot.data;
+                        return Text(
+                          '${sender?.name ?? ''}: ${chat.lastMessage!.content}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.grey[600],
                           ),
-                          title: Text(title),
-                          subtitle: Text(
-                            chat.lastMessage ?? 'Henüz mesaj yok',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: chat.lastMessageTime != null
-                              ? Text(
-                                  _formatDate(chat.lastMessageTime!),
-                                  style: const TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 12,
-                                  ),
-                                )
-                              : null,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ChatDetailScreen(chat: chat),
-                              ),
-                            );
-                          },
                         );
                       },
-                    );
-                  },
+                    )
+                  : Text(
+                      chat.isGroup ? 'Grup sohbeti' : 'Yeni sohbet',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                      ),
+                    ),
+            ),
+            StreamBuilder<int>(
+              stream: context.read<ChatService>().getChatUnreadCount(chat.id),
+              builder: (context, snapshot) {
+                final unreadCount = snapshot.data ?? 0;
+                if (unreadCount == 0) return const SizedBox.shrink();
+                
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    unreadCount.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 );
               },
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showNewChatDialog(context),
-        child: const Icon(Icons.chat),
-        tooltip: 'Yeni Sohbet',
+          ],
+        ),
+        trailing: PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert),
+          onSelected: (value) async {
+            switch (value) {
+              case 'delete':
+                await _deleteChat(context, chat);
+                break;
+              case 'mute':
+                await context.read<ChatService>().toggleMuteChat(chat.id);
+                break;
+            }
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: 'mute',
+              child: Row(
+                children: [
+                  Icon(
+                    chat.mutedBy.contains(context.read<UserService>().currentUser?.id)
+                        ? Icons.notifications_off
+                        : Icons.notifications,
+                    size: 20,
+                    color: Colors.grey[600],
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    chat.mutedBy.contains(context.read<UserService>().currentUser?.id)
+                        ? 'Bildirimleri Aç'
+                        : 'Sessize Al',
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.delete_outline,
+                    size: 20,
+                    color: Colors.grey[600],
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('Sohbeti Sil'),
+                ],
+              ),
+            ),
+          ],
+        ),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatDetailScreen(chat: chat),
+            ),
+          );
+        },
       ),
     );
   }
 
-  Future<String> _getChatTitle(ChatModel chat, String currentUserId, UserService userService) async {
-    if (chat.isGroup) {
-      return chat.name;
-    } else {
-      // Birebir sohbetlerde diğer kullanıcının adını göster
-      final otherUserId = chat.participants.firstWhere(
-        (id) => id != currentUserId,
-        orElse: () => '',
-      );
-      if (otherUserId.isEmpty) return chat.name;
-      
-      final otherUser = await userService.getUserById(otherUserId);
-      return otherUser?.name ?? chat.name;
-    }
+  @override
+  Widget build(BuildContext context) {
+    final currentUser = context.watch<UserService>().currentUser;
+    final isAdmin = currentUser?.role == 'admin';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Mesajlar'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              showSearch(
+                context: context,
+                delegate: UserSearchDelegate(
+                  userService: context.read<UserService>(),
+                  chatService: context.read<ChatService>(),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      body: StreamBuilder<List<ChatModel>>(
+        stream: context.read<ChatService>().getUserChats(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Hata: ${snapshot.error}'));
+          }
+
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final chats = snapshot.data!;
+
+          if (chats.isEmpty) {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.chat_bubble_outline,
+                    size: 64,
+                    color: Colors.grey,
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Henüz mesajınız yok',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            itemCount: chats.length,
+            itemBuilder: (context, index) {
+              final chat = chats[index];
+              return _buildChatTile(context, chat);
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          if (isAdmin) {
+            showModalBottomSheet(
+              context: context,
+              builder: (context) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.person_add),
+                    title: const Text('Yeni Mesaj'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showNewChatDialog(context);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.group_add),
+                    title: const Text('Yeni Grup'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showNewGroupDialog(context);
+                    },
+                  ),
+                ],
+              ),
+            );
+          } else {
+            _showNewChatDialog(context);
+          }
+        },
+        child: const Icon(Icons.message),
+      ),
+    );
   }
 
   String _formatDate(DateTime date) {
     final now = DateTime.now();
-    final difference = now.difference(date);
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(date.year, date.month, date.day);
 
-    if (difference.inDays == 0) {
-      return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    } else if (difference.inDays == 1) {
+    if (messageDate == today) {
+      return '${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    } else if (messageDate == today.subtract(const Duration(days: 1))) {
       return 'Dün';
-    } else if (difference.inDays < 7) {
-      final weekDays = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
-      return weekDays[date.weekday - 1];
     } else {
       return '${date.day}/${date.month}/${date.year}';
     }

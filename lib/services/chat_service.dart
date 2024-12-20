@@ -34,98 +34,63 @@ class ChatService extends ChangeNotifier {
     try {
       final currentUser = _userService.currentUser;
       if (currentUser == null) {
-        throw Exception('Oturum açmış kullanıcı bulunamadı');
+        throw Exception('Kullanıcı oturumu bulunamadı');
       }
 
-      print('Creating chat with isGroup: $isGroup');
-
-      // Eğer birebir sohbet ise ve zaten varsa, mevcut sohbeti döndür
-      if (!isGroup && participants.length == 1) {
-        final existingChat = await _firestore
-            .collection(_collection)
-            .where('participants', arrayContains: currentUser.id)
-            .where('isGroup', isEqualTo: false)
-            .get();
-
-        for (var doc in existingChat.docs) {
-          final chatParticipants = List<String>.from(doc.data()['participants']);
-          if (chatParticipants.length == 2 &&
-              chatParticipants.contains(participants[0])) {
-            return ChatModel.fromMap({...doc.data(), 'id': doc.id}, userService: _userService);
-          }
-        }
-      }
+      // Katılımcılara mevcut kullanıcıyı ekle
+      final allParticipants = [...participants, currentUser.id];
 
       final now = DateTime.now();
-      final chatData = {
-        'name': name,
-        'participants': [...participants, currentUser.id],
-        'createdBy': currentUser.id,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'lastMessage': null,
-        'lastMessageTime': null,
-        'isGroup': isGroup,
-        'unreadCount': 0,
-      };
+      final chatRef = _firestore.collection(_collection).doc();
 
-      print('Creating chat with data: $chatData');
-
-      final docRef = await _firestore.collection(_collection).add(chatData);
-      
-      return ChatModel(
-        id: docRef.id,
+      final chat = ChatModel(
+        id: chatRef.id,
         name: name,
-        participants: [...participants, currentUser.id],
+        participants: allParticipants,
+        messages: [], // Boş mesaj listesi
+        isGroup: isGroup,
         createdBy: currentUser.id,
+        mutedBy: [], // Başlangıçta kimse sessize almamış
         createdAt: now,
         updatedAt: now,
-        lastMessage: null,
-        lastMessageTime: null,
-        isGroup: isGroup,
-        unreadCount: 0,
-        userService: _userService,
       );
+
+      await chatRef.set(chat.toMap());
+      return chat;
     } catch (e) {
       print('Sohbet oluşturma hatası: $e');
-      rethrow;
+      throw Exception('Sohbet oluşturulamadı: $e');
     }
   }
 
   Future<void> sendMessage({
     required String chatId,
     required String content,
-    String? attachment,
+    String? attachmentUrl,
+    String type = MessageModel.typeText,
   }) async {
-    try {
-      final currentUser = _userService.currentUser;
-      if (currentUser == null) throw Exception('Kullanıcı oturumu bulunamadı');
-
-      final now = DateTime.now();
-      final message = MessageModel(
-        id: '',
-        chatId: chatId,
-        senderId: currentUser.id,
-        content: content,
-        attachment: attachment,
-        createdAt: now,
-        type: attachment != null ? 'file' : 'text',
-      );
-
-      await _firestore
-          .collection(_collection)
-          .doc(chatId)
-          .collection(_messagesCollection)
-          .add(message.toMap());
-
-      await _firestore.collection(_collection).doc(chatId).update({
-        'lastMessage': content,
-        'lastMessageTime': now,
-        'updatedAt': now,
-      });
-    } catch (e) {
-      throw Exception('Mesaj gönderilemedi: $e');
+    final currentUser = _userService.currentUser;
+    if (currentUser == null) {
+      throw Exception('Kullanıcı oturum açmamış');
     }
+
+    final chatRef = _firestore.collection(_collection).doc(chatId);
+    final now = DateTime.now();
+
+    final message = MessageModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      senderId: currentUser.id,
+      content: content,
+      createdAt: now,
+      attachmentUrl: attachmentUrl,
+      type: type,
+      readBy: [currentUser.id],
+    );
+
+    await chatRef.update({
+      'messages': FieldValue.arrayUnion([message.toMap()]),
+      'updatedAt': now,
+    });
   }
 
   Future<void> sendFileMessage({
@@ -144,7 +109,7 @@ class ChatService extends ChangeNotifier {
       await sendMessage(
         chatId: chatId,
         content: fileName,
-        attachment: fileUrl,
+        attachmentUrl: fileUrl,
       );
     } catch (e) {
       throw Exception('Dosya gönderilemedi: $e');
@@ -192,16 +157,14 @@ class ChatService extends ChangeNotifier {
 
   Stream<List<ChatModel>> getUserChats() {
     final currentUser = _userService.currentUser;
-    if (currentUser == null) {
-      return Stream.value([]);
-    }
+    if (currentUser == null) return Stream.value([]);
 
     return _firestore
         .collection(_collection)
         .where('participants', arrayContains: currentUser.id)
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => ChatModel.fromMap({...doc.data(), 'id': doc.id}, userService: _userService))
+            .map((doc) => ChatModel.fromFirestore(doc))
             .toList());
   }
 
@@ -210,15 +173,18 @@ class ChatService extends ChangeNotifier {
       return _firestore
           .collection(_collection)
           .doc(chatId)
-          .collection(_messagesCollection)
           .snapshots()
-          .map((snapshot) {
-            final messages = snapshot.docs
-                .map((doc) => MessageModel.fromFirestore(doc))
-                .toList();
+          .map((doc) {
+            if (!doc.exists) return [];
             
-            // Mesajları createdAt'e göre sırala
-            messages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            final chat = ChatModel.fromFirestore(doc);
+            final messages = List<MessageModel>.from(chat.messages);
+            
+            // Mesajları tarihe göre sırala (en yeni en altta)
+            messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+            
+            // Mesajları okundu olarak işaretle
+            _markMessagesAsRead(chatId, messages);
             
             return messages;
           });
@@ -226,6 +192,89 @@ class ChatService extends ChangeNotifier {
       print('Mesajları getirirken hata: $e');
       return Stream.value([]);
     }
+  }
+
+  Future<void> _markMessagesAsRead(String chatId, List<MessageModel> messages) async {
+    try {
+      final currentUser = _userService.currentUser;
+      if (currentUser == null) return;
+
+      final batch = _firestore.batch();
+      final unreadMessages = messages.where((msg) => 
+        !msg.readBy.contains(currentUser.id) && 
+        msg.senderId != currentUser.id
+      );
+
+      if (unreadMessages.isEmpty) return;
+
+      final chatRef = _firestore.collection(_collection).doc(chatId);
+      final chatDoc = await chatRef.get();
+      
+      if (!chatDoc.exists) return;
+
+      final updatedMessages = messages.map((msg) {
+        if (!msg.readBy.contains(currentUser.id) && msg.senderId != currentUser.id) {
+          return {
+            ...msg.toMap(),
+            'readBy': [...msg.readBy, currentUser.id],
+          };
+        }
+        return msg.toMap();
+      }).toList();
+
+      await chatRef.update({'messages': updatedMessages});
+    } catch (e) {
+      print('Mesajlar okundu olarak işaretlenirken hata: $e');
+    }
+  }
+
+  Stream<int> getUnreadMessagesCount() {
+    final currentUser = _userService.currentUser;
+    if (currentUser == null) {
+      return Stream.value(0);
+    }
+
+    return _firestore
+        .collection(_collection)
+        .where('participants', arrayContains: currentUser.id)
+        .snapshots()
+        .map((snapshot) {
+          int totalUnread = 0;
+          
+          for (var doc in snapshot.docs) {
+            final chat = ChatModel.fromFirestore(doc);
+            final unreadMessages = chat.messages.where((msg) => 
+              !msg.readBy.contains(currentUser.id) && 
+              msg.senderId != currentUser.id
+            );
+            totalUnread += unreadMessages.length;
+          }
+          
+          return totalUnread;
+        });
+  }
+
+  Stream<int> getChatUnreadCount(String chatId) {
+    final currentUser = _userService.currentUser;
+    if (currentUser == null) {
+      return Stream.value(0);
+    }
+
+    return _firestore
+        .collection(_collection)
+        .doc(chatId)
+        .snapshots()
+        .map((doc) {
+          if (!doc.exists) return 0;
+          
+          final chat = ChatModel.fromFirestore(doc);
+          final unreadMessages = chat.messages.where((msg) => 
+            !msg.readBy.contains(currentUser.id) && 
+            msg.senderId != currentUser.id
+          );
+          
+          return unreadMessages.length;
+        });
   }
 
   Stream<List<UserModel>> getChatParticipants(String chatId) {
@@ -278,41 +327,7 @@ class ChatService extends ChangeNotifier {
   }
 
   Future<void> deleteChat(String chatId) async {
-    try {
-      final currentUser = _userService.currentUser;
-      if (currentUser == null) {
-        throw Exception('Oturum açmış kullanıcı bulunamadı');
-      }
-
-      // Sohbetin var olduğunu ve kullanıcının yetkisi olduğunu kontrol et
-      final chatDoc = await _firestore.collection(_collection).doc(chatId).get();
-      if (!chatDoc.exists) {
-        throw Exception('Sohbet bulunamadı');
-      }
-
-      final chatData = chatDoc.data()!;
-      if (!chatData['participants'].contains(currentUser.id)) {
-        throw Exception('Bu sohbeti silme yetkiniz yok');
-      }
-
-      // Önce tüm mesajları sil
-      final messagesSnapshot = await _firestore
-          .collection(_collection)
-          .doc(chatId)
-          .collection(_messagesCollection)
-          .get();
-
-      final batch = _firestore.batch();
-      for (var doc in messagesSnapshot.docs) {
-        batch.delete(doc.reference);
-      }
-      batch.delete(_firestore.collection(_collection).doc(chatId));
-      
-      await batch.commit();
-    } catch (e) {
-      print('Sohbet silme hatası: $e');
-      rethrow;
-    }
+    await _firestore.collection(_collection).doc(chatId).delete();
   }
 
   Future<void> leaveChat(String chatId) async {
@@ -349,36 +364,6 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  Stream<int> getUnreadMessagesCount() {
-    final currentUser = _userService.currentUser;
-    if (currentUser == null) {
-      return Stream.value(0);
-    }
-
-    return _firestore
-        .collection(_collection)
-        .where('participants', arrayContains: currentUser.id)
-        .snapshots()
-        .asyncMap((chatSnapshot) async {
-      int totalUnread = 0;
-
-      for (var chatDoc in chatSnapshot.docs) {
-        final unreadCount = await _firestore
-            .collection(_collection)
-            .doc(chatDoc.id)
-            .collection(_messagesCollection)
-            .where('isRead', isEqualTo: false)
-            .where('senderId', isNotEqualTo: currentUser.id)
-            .count()
-            .get();
-
-        totalUnread += unreadCount.count ?? 0;
-      }
-
-      return totalUnread;
-    });
-  }
-
   Future<void> markAllMessagesAsRead(String chatId) async {
     try {
       final currentUser = _userService.currentUser;
@@ -413,17 +398,11 @@ class ChatService extends ChangeNotifier {
     return _firestore
         .collection(_collection)
         .where('participants', arrayContains: currentUser.id)
-        .orderBy('lastMessageTime', descending: true)
+        .orderBy('updatedAt', descending: true)
         .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        return ChatModel.fromMap({
-          'id': doc.id,
-          ...data,
-        }, userService: _userService);
-      }).toList();
-    });
+        .map((snapshot) => snapshot.docs
+            .map((doc) => ChatModel.fromFirestore(doc))
+            .toList());
   }
 
   Future<void> toggleMuteChat(String chatId) async {
@@ -456,5 +435,38 @@ class ChatService extends ChangeNotifier {
       print('Sohbet sessize alma hatası: $e');
       rethrow;
     }
+  }
+
+  Future<void> markMessageAsRead(String chatId, String messageId) async {
+    final currentUser = _userService.currentUser;
+    if (currentUser == null) return;
+
+    final chatRef = _firestore.collection(_collection).doc(chatId);
+    final chatDoc = await chatRef.get();
+    
+    if (!chatDoc.exists) return;
+    
+    final chat = ChatModel.fromFirestore(chatDoc);
+    final messages = List<MessageModel>.from(chat.messages);
+    
+    final messageIndex = messages.indexWhere((m) => m.id == messageId);
+    if (messageIndex == -1) return;
+    
+    final message = messages[messageIndex];
+    if (message.readBy.contains(currentUser.id)) return;
+    
+    messages[messageIndex] = MessageModel(
+      id: message.id,
+      senderId: message.senderId,
+      content: message.content,
+      createdAt: message.createdAt,
+      readBy: [...message.readBy, currentUser.id],
+      attachmentUrl: message.attachmentUrl,
+      type: message.type,
+    );
+
+    await chatRef.update({
+      'messages': messages.map((m) => m.toMap()).toList(),
+    });
   }
 } 

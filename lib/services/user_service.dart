@@ -96,4 +96,17 @@ class UserService extends ChangeNotifier {
       throw Exception('Kullanıcı silinemedi: $e');
     }
   }
+
+  // Birden fazla kullanıcıyı stream olarak getir
+  Stream<List<UserModel>> getMultipleUsers(List<String> userIds) {
+    if (userIds.isEmpty) return Stream.value([]);
+    
+    return _firestore
+        .collection(_collection)
+        .where(FieldPath.documentId, whereIn: userIds)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => UserModel.fromFirestore(doc))
+            .toList());
+  }
 }
