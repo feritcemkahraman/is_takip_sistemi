@@ -111,9 +111,15 @@ class ActiveTasksScreen extends StatelessWidget {
                 child: ListTile(
                   leading: CircleAvatar(
                     backgroundColor: _getPriorityColor(task.priority),
-                    child: Text(
-                      '${task.priority}',
-                      style: const TextStyle(color: Colors.white),
+                    child: StreamBuilder<int>(
+                      stream: taskService.getUserActiveTaskCountStream(currentUser?.id ?? ''),
+                      builder: (context, snapshot) {
+                        final count = snapshot.data ?? 0;
+                        return Text(
+                          '$count',
+                          style: const TextStyle(color: Colors.white),
+                        );
+                      },
                     ),
                   ),
                   title: Text(

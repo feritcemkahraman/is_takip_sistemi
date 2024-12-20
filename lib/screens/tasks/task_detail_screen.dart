@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:path/path.dart' as path;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:photo_view/photo_view.dart';
 import '../../models/task_model.dart';
 import '../../models/user_model.dart';
 import '../../services/task_service.dart';
@@ -11,6 +14,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../models/comment_model.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final TaskModel task;
@@ -138,14 +142,71 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
-  Future<void> _openAttachment(String filePath) async {
+  Future<void> _openFile(String filePath) async {
     try {
-      final file = await context.read<LocalStorageService>().getTaskAttachment(filePath);
-      if (file == null) throw Exception('Dosya bulunamadı');
-
-      final uri = Uri.file(file.path);
-      if (!await launchUrl(uri)) {
-        throw Exception('Dosya açılamadı');
+      if (filePath.toLowerCase().endsWith('.jpg') ||
+          filePath.toLowerCase().endsWith('.jpeg') ||
+          filePath.toLowerCase().endsWith('.png')) {
+        // Firebase Storage referansını al
+        final storageRef = FirebaseStorage.instance.ref().child(filePath);
+        // Görsel URL'ini al
+        final imageUrl = await storageRef.getDownloadURL();
+        
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => Dialog(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppBar(
+                    title: Text(filePath.split('/').last),
+                    leading: IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ),
+                  Flexible(
+                    child: InteractiveViewer(
+                      panEnabled: true,
+                      boundaryMargin: const EdgeInsets.all(20),
+                      minScale: 0.5,
+                      maxScale: 4,
+                      child: Image.network(
+                        imageUrl,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Center(
+                            child: Text('Görsel yüklenemedi'),
+                          );
+                        },
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                      loadingProgress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+      } else {
+        // Diğer dosya türleri için uyarı göster
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Bu dosya türü şu anda görüntülenemiyor'),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -164,6 +225,55 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Görev Detayı'),
+        actions: [
+          if (widget.canInteract && widget.task.status != 'completed' && 
+              currentUser?.id == widget.task.assignedTo)
+            TextButton.icon(
+              icon: const Icon(Icons.check_circle, color: Colors.white),
+              label: const Text(
+                'Tamamlandı',
+                style: TextStyle(color: Colors.white),
+              ),
+              onPressed: () async {
+                try {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Görevi Tamamla'),
+                      content: const Text('Bu görevi tamamlandı olarak işaretlemek istediğinize emin misiniz?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('İptal'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Tamamla'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirmed == true) {
+                    await context.read<TaskService>().completeTask(widget.task.id);
+                    
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Görev tamamlandı olarak işaretlendi')),
+                      );
+                      Navigator.pop(context); // Görev detay ekranından çık
+                    }
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Hata: $e')),
+                    );
+                  }
+                }
+              },
+            ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -365,7 +475,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                                             children: [
                                               IconButton(
                                                 icon: const Icon(Icons.remove_red_eye),
-                                                onPressed: () => _openAttachment(attachment),
+                                                onPressed: () => _openFile(attachment),
                                               ),
                                               IconButton(
                                                 icon: const Icon(Icons.download),

@@ -296,4 +296,45 @@ class TaskService with ChangeNotifier {
       return Stream.value([]);
     }
   }
+
+  // Kullanıcının aktif görev sayısını getir
+  Future<int> getUserActiveTaskCount(String userId) async {
+    try {
+      final querySnapshot = await _firestore
+          .collection(_collection)
+          .where('assignedTo', isEqualTo: userId)
+          .where('status', isEqualTo: 'active')
+          .get();
+      return querySnapshot.docs.length;
+    } catch (e) {
+      print('Error getting user task count: $e');
+      return 0;
+    }
+  }
+
+  // Kullanıcının aktif görev sayısını stream olarak getir
+  Stream<int> getUserActiveTaskCountStream(String userId) {
+    try {
+      return _firestore
+          .collection(_collection)
+          .where('assignedTo', isEqualTo: userId)
+          .where('status', isEqualTo: 'active')
+          .snapshots()
+          .map((snapshot) => snapshot.docs.length);
+    } catch (e) {
+      print('Error getting user task count stream: $e');
+      return Stream.value(0);
+    }
+  }
+
+  Stream<List<TaskModel>> getCompletedTasksStream() {
+    return _firestore
+        .collection(_collection)
+        .where('status', isEqualTo: 'completed')
+        .orderBy('completedAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => TaskModel.fromFirestore(doc))
+            .toList());
+  }
 }
