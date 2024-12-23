@@ -116,6 +116,21 @@ class ChatService extends ChangeNotifier {
 
     final batch = _firestore.batch();
 
+    // Sohbeti al ve katılımcıları kontrol et
+    final chatDoc = await _firestore.collection(_collection).doc(chatId).get();
+    if (!chatDoc.exists) return;
+
+    final chatData = chatDoc.data() as Map<String, dynamic>;
+    List<String> participants = List<String>.from(chatData['participants'] as List);
+    
+    // Eğer gönderen kullanıcı katılımcılar listesinde yoksa, ekle
+    if (!participants.contains(currentUser.id)) {
+      participants.add(currentUser.id);
+      batch.update(_firestore.collection(_collection).doc(chatId), {
+        'participants': participants,
+      });
+    }
+
     // Yeni mesaj referansı oluştur
     final messageRef = _firestore
         .collection(_collection)
@@ -137,25 +152,21 @@ class ChatService extends ChangeNotifier {
 
     // Mesajı batch'e ekle
     batch.set(messageRef, message.toFirestore());
+    
+    // Okunmamış mesaj sayısını güncelle
+    final currentUnreadCount = chatData['unreadCount'] as int? ?? 0;
+    final newUnreadCount = currentUnreadCount + (participants.length - 1); // Gönderen hariç
 
     // Sohbetin son mesajını ve okunmamış mesaj sayısını güncelle
-    final chatRef = _firestore.collection(_collection).doc(chatId);
-    batch.update(chatRef, {
+    batch.update(_firestore.collection(_collection).doc(chatId), {
       'lastMessage': message.toMap(),
       'updatedAt': Timestamp.fromDate(now),
-      'unreadCount': FieldValue.increment(1),
+      'unreadCount': newUnreadCount,
     });
 
     // Batch'i commit et
     await batch.commit();
 
-    // Sohbeti al ve diğer kullanıcılara bildirim gönder
-    final chatDoc = await chatRef.get();
-    if (!chatDoc.exists) return;
-
-    final chatData = chatDoc.data() as Map<String, dynamic>;
-    final participants = List<String>.from(chatData['participants'] as List);
-    
     // Bildirim gönderilecek kullanıcıları bul (gönderen hariç)
     final otherParticipants = participants.where((id) => id != currentUser.id);
 

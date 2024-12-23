@@ -130,11 +130,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   Future<void> _showUserSearch() async {
-    final currentUser = context.read<UserService>().currentUser;
+    final userService = context.read<UserService>();
+    final currentUser = userService.currentUser;
     if (currentUser == null) return;
 
-    final users = await context.read<UserService>().getAllUsers();
-    
+    final users = await userService.getAllUsers();
     if (!mounted) return;
 
     final selectedUser = await showSearch<UserModel?>(
@@ -142,37 +142,27 @@ class _ChatListScreenState extends State<ChatListScreen> {
       delegate: UserSearchDelegate(
         users: users,
         currentUserId: currentUser.id,
-        userService: context.read<UserService>(),
+        userService: userService,
       ),
     );
 
     if (selectedUser != null && mounted) {
-      final chatService = context.read<ChatService>();
-      
-      final existingChat = await chatService.findExistingChat(selectedUser.id);
-      
-      if (existingChat != null) {
-        if (!mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChatScreen(chat: existingChat),
-          ),
-        );
-        return;
-      }
-
-      final chat = await chatService.createChat(
-        name: selectedUser.name,
-        participants: [selectedUser.id],
-      );
-
-      if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => ChatScreen(
-            chat: chat,
+            chat: ChatModel(
+              id: '',
+              name: selectedUser.name,
+              participants: [selectedUser.id],
+              createdBy: currentUser.id,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+              isGroup: false,
+              mutedBy: const [],
+              messages: const [],
+              unreadCount: 0,
+            ),
             isNewChat: true,
           ),
         ),

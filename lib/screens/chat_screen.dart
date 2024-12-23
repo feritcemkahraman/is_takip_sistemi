@@ -64,14 +64,18 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       if (widget.isNewChat && _createdChat == null) {
-        // Yeni sohbet oluştur
-        _createdChat = await _chatService.createChat(
-          name: widget.chat.name,
-          participants: widget.chat.participants.where((id) => 
-            id != _userService.currentUser?.id
-          ).toList(),
-          isGroup: widget.chat.isGroup,
-        );
+        // Önce mevcut sohbeti kontrol et
+        final existingChat = await _chatService.findExistingChat(widget.chat.participants.first);
+        if (existingChat != null) {
+          _createdChat = existingChat;
+        } else {
+          // Yeni sohbet oluştur
+          _createdChat = await _chatService.createChat(
+            name: widget.chat.name,
+            participants: widget.chat.participants,
+            isGroup: widget.chat.isGroup,
+          );
+        }
       }
 
       await _chatService.sendMessage(
