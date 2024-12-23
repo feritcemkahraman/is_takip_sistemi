@@ -194,22 +194,32 @@ class ChatService extends ChangeNotifier {
   }
 
   Future<void> deleteChat(String chatId) async {
-    // Önce tüm mesajları sil
-    final messagesSnapshot = await _firestore
-        .collection(_collection)
-        .doc(chatId)
-        .collection(_messagesCollection)
-        .get();
+    try {
+      // Önce tüm mesajları sil
+      final messagesSnapshot = await _firestore
+          .collection(_collection)
+          .doc(chatId)
+          .collection(_messagesCollection)
+          .get();
 
-    final batch = _firestore.batch();
-    for (var doc in messagesSnapshot.docs) {
-      batch.delete(doc.reference);
+      final batch = _firestore.batch();
+      
+      // Mesajları batch'e ekle
+      for (var doc in messagesSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
+      // Sohbeti batch'e ekle
+      batch.delete(_firestore.collection(_collection).doc(chatId));
+
+      // Batch'i commit et
+      await batch.commit();
+      
+      notifyListeners();
+    } catch (e) {
+      print('Error deleting chat: $e');
+      throw Exception('Sohbet silinirken bir hata oluştu');
     }
-    await batch.commit();
-
-    // Sonra sohbeti sil
-    await _firestore.collection(_collection).doc(chatId).delete();
-    notifyListeners();
   }
 
   Future<void> markAllMessagesAsRead(String chatId) async {

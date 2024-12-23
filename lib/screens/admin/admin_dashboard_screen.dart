@@ -6,6 +6,7 @@ import '../../services/chat_service.dart';
 import '../../services/user_service.dart';
 import '../../widgets/admin/user_activity_widget.dart';
 import '../../widgets/dashboard_card.dart';
+import '../../models/task_model.dart';
 import '../chat_list_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -57,18 +58,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            FutureBuilder<List<dynamic>>(
-              future: Future.wait([
-                taskService.getActiveTasks(),
-                taskService.getCompletedTasks(),
-              ]),
+            StreamBuilder<List<TaskModel>>(
+              stream: taskService.getActiveTasksStream(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final activeTasks = snapshot.data?[0] ?? [];
-                final completedTasks = snapshot.data?[1] ?? [];
+                final activeTasks = snapshot.data ?? [];
+                final upcomingTasks = activeTasks.where((task) {
+                  final now = DateTime.now();
+                  final difference = task.deadline.difference(now).inDays;
+                  return difference >= 0 && difference <= 7;
+                }).toList();
 
                 return Column(
                   children: [
@@ -85,11 +87,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           const SizedBox(height: 16),
                           DashboardCard(
                             title: 'Yaklaşan Görevler',
-                            count: activeTasks.where((task) {
-                              final now = DateTime.now();
-                              final difference = task.deadline.difference(now).inDays;
-                              return difference >= 0 && difference <= 7;
-                            }).length,
+                            count: upcomingTasks.length,
                             icon: Icons.upcoming,
                             color: Colors.orange,
                             onTap: () => Navigator.pushNamed(
@@ -99,12 +97,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             ),
                           ),
                           const SizedBox(height: 16),
-                          DashboardCard(
-                            title: 'Tamamlanan Görevler',
-                            count: completedTasks.length,
-                            icon: Icons.task_alt,
-                            color: Colors.green,
-                            onTap: () => Navigator.pushNamed(context, '/completed-tasks-screen'),
+                          StreamBuilder<List<TaskModel>>(
+                            stream: taskService.getCompletedTasksStream(),
+                            builder: (context, completedSnapshot) {
+                              final completedTasks = completedSnapshot.data ?? [];
+                              return DashboardCard(
+                                title: 'Tamamlanan Görevler',
+                                count: completedTasks.length,
+                                icon: Icons.task_alt,
+                                color: Colors.green,
+                                onTap: () => Navigator.pushNamed(context, '/completed-tasks-screen'),
+                              );
+                            },
                           ),
                         ],
                       )
@@ -124,11 +128,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           Expanded(
                             child: DashboardCard(
                               title: 'Yaklaşan Görevler',
-                              count: activeTasks.where((task) {
-                                final now = DateTime.now();
-                                final difference = task.deadline.difference(now).inDays;
-                                return difference >= 0 && difference <= 7;
-                              }).length,
+                              count: upcomingTasks.length,
                               icon: Icons.upcoming,
                               color: Colors.orange,
                               onTap: () => Navigator.pushNamed(
@@ -140,12 +140,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           ),
                           const SizedBox(width: 16),
                           Expanded(
-                            child: DashboardCard(
-                              title: 'Tamamlanan Görevler',
-                              count: completedTasks.length,
-                              icon: Icons.task_alt,
-                              color: Colors.green,
-                              onTap: () => Navigator.pushNamed(context, '/completed-tasks-screen'),
+                            child: StreamBuilder<List<TaskModel>>(
+                              stream: taskService.getCompletedTasksStream(),
+                              builder: (context, completedSnapshot) {
+                                final completedTasks = completedSnapshot.data ?? [];
+                                return DashboardCard(
+                                  title: 'Tamamlanan Görevler',
+                                  count: completedTasks.length,
+                                  icon: Icons.task_alt,
+                                  color: Colors.green,
+                                  onTap: () => Navigator.pushNamed(context, '/completed-tasks-screen'),
+                                );
+                              },
                             ),
                           ),
                         ],

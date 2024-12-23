@@ -244,6 +244,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
                 if (confirm == true && mounted) {
                   try {
+                    setState(() => _isLoading = true);
                     await context.read<ChatService>().deleteChat(chat.id);
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -255,6 +256,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('Hata: $e')),
                       );
+                    }
+                  } finally {
+                    if (mounted) {
+                      setState(() => _isLoading = false);
                     }
                   }
                 }
