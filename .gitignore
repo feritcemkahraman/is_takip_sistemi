@@ -14,4 +14,9 @@ yarn-error.log*
 
 # IDE
 .idea/
-.vscode/ 
+.vscode/
+
+# build
+build/
+*.apk
+*.so

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="gcm_defaultSenderId" translatable="false">795393167329</string>
-    <string name="google_api_key" translatable="false">AIzaSyDiaALmm-KD5LTzoZcwZimM3b3SJ5KeEx8</string>
-    <string name="google_app_id" translatable="false">1:795393167329:android:d1eacfa19e3d38d8ca4ca0</string>
-    <string name="google_crash_reporting_api_key" translatable="false">AIzaSyDiaALmm-KD5LTzoZcwZimM3b3SJ5KeEx8</string>
-    <string name="google_storage_bucket" translatable="false">is-takip-sistemi-69ca5.firebasestorage.app</string>
-    <string name="project_id" translatable="false">is-takip-sistemi-69ca5</string>
-</resources>
