@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import '../services/chat_service.dart';
 import '../services/user_service.dart';
 import '../models/chat_model.dart';
@@ -266,6 +267,117 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
+  Future<void> _showCreateGroupDialog(BuildContext context) async {
+    final userService = context.read<UserService>();
+    final chatService = context.read<ChatService>();
+    final currentUser = userService.currentUser;
+    if (currentUser == null) return;
+
+    final selectedUsers = <UserModel>[];
+    String groupName = '';
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Yeni Grup Oluştur'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  decoration: const InputDecoration(
+                    labelText: 'Grup Adı',
+                    hintText: 'Grup adını girin',
+                  ),
+                  onChanged: (value) => groupName = value,
+                ),
+                const SizedBox(height: 16),
+                FutureBuilder<List<UserModel>>(
+                  future: userService.getAllUsers(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const CircularProgressIndicator();
+                    }
+
+                    final users = snapshot.data!
+                        .where((user) => user.id != currentUser.id)
+                        .toList();
+
+                    return Column(
+                      children: users.map((user) => CheckboxListTile(
+                        title: Text(user.name),
+                        subtitle: Text(user.department),
+                        value: selectedUsers.contains(user),
+                        onChanged: (bool? value) {
+                          setState(() {
+                            if (value == true) {
+                              selectedUsers.add(user);
+                            } else {
+                              selectedUsers.remove(user);
+                            }
+                          });
+                        },
+                      )).toList(),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('İptal'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (groupName.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Lütfen grup adı girin')),
+                  );
+                  return;
+                }
+                if (selectedUsers.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Lütfen en az bir kullanıcı seçin')),
+                  );
+                  return;
+                }
+                Navigator.pop(context);
+                
+                try {
+                  final chat = await chatService.createChat(
+                    name: groupName,
+                    participants: selectedUsers.map((u) => u.id).toList(),
+                    isGroup: true,
+                  );
+
+                  if (!mounted) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChatScreen(
+                        chat: chat,
+                        isNewChat: true,
+                      ),
+                    ),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Hata: $e')),
+                  );
+                }
+              },
+              child: const Text('Oluştur'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = context.watch<UserService>().currentUser;
@@ -457,10 +569,37 @@ class _ChatListScreenState extends State<ChatListScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showNewChatDialog(context),
-        child: const Icon(Icons.message),
-        tooltip: 'Yeni Sohbet',
+      floatingActionButton: SpeedDial(
+        icon: Icons.add,
+        activeIcon: Icons.close,
+        backgroundColor: Theme.of(context).primaryColor,
+        foregroundColor: Colors.white,
+        activeBackgroundColor: Colors.red,
+        activeForegroundColor: Colors.white,
+        buttonSize: const Size(56.0, 56.0),
+        visible: true,
+        closeManually: false,
+        curve: Curves.bounceIn,
+        overlayColor: Colors.black,
+        overlayOpacity: 0.5,
+        elevation: 8.0,
+        shape: const CircleBorder(),
+        children: [
+          SpeedDialChild(
+            child: const Icon(Icons.message),
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+            label: 'Yeni Sohbet',
+            onTap: () => _showNewChatDialog(context),
+          ),
+          SpeedDialChild(
+            child: const Icon(Icons.group_add),
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+            label: 'Yeni Grup',
+            onTap: () => _showCreateGroupDialog(context),
+          ),
+        ],
       ),
     );
   }

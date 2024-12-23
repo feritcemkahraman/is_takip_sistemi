@@ -266,6 +266,12 @@
       "languageVersion": "3.2"
     },
     {
+      "name": "flutter_speed_dial",
+      "rootUri": "file:///C:/Users/win10/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_speed_dial-7.0.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "flutter_test",
       "rootUri": "file:///c:/src/flutter/packages/flutter_test",
       "packageUri": "lib/",
@@ -746,7 +752,7 @@
       "languageVersion": "3.0"
     }
   ],
-  "generated": "2024-12-23T10:45:50.129654Z",
+  "generated": "2024-12-23T12:52:59.133607Z",
   "generator": "pub",
   "generatorVersion": "3.2.6"
 }

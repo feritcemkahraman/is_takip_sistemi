@@ -425,15 +425,23 @@ class TaskService with ChangeNotifier {
       final currentUser = _userService.currentUser;
       if (currentUser == null) return Stream.value([]);
 
-      return _firestore
+      Query query = _firestore
           .collection(_collection)
-          .where('assignedTo', isEqualTo: currentUser.id)
           .where('status', isEqualTo: 'active')
+          .orderBy('deadline');
+
+      // Admin değilse sadece kendi görevlerini görsün
+      if (currentUser.role != 'admin') {
+        query = query.where('assignedTo', isEqualTo: currentUser.id);
+      }
+
+      return query
           .snapshots()
           .map((snapshot) => snapshot.docs
               .map((doc) => TaskModel.fromFirestore(doc))
               .toList());
     } catch (e) {
+      print('Error getting active tasks stream: $e');
       return Stream.value([]);
     }
   }
@@ -474,15 +482,23 @@ class TaskService with ChangeNotifier {
       final currentUser = _userService.currentUser;
       if (currentUser == null) return Stream.value([]);
 
-      return _firestore
+      Query query = _firestore
           .collection(_collection)
-          .where('assignedTo', isEqualTo: currentUser.id)
           .where('status', isEqualTo: 'completed')
+          .orderBy('completedAt', descending: true);
+
+      // Admin değilse sadece kendi görevlerini görsün
+      if (currentUser.role != 'admin') {
+        query = query.where('assignedTo', isEqualTo: currentUser.id);
+      }
+
+      return query
           .snapshots()
           .map((snapshot) => snapshot.docs
               .map((doc) => TaskModel.fromFirestore(doc))
               .toList());
     } catch (e) {
+      print('Error getting completed tasks stream: $e');
       return Stream.value([]);
     }
   }
