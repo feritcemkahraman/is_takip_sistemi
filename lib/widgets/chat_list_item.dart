@@ -123,9 +123,52 @@ class ChatListItem extends StatelessWidget {
                 }
               }
             }
+          } else if (value == 'mute') {
+            try {
+              if (chat.mutedBy.contains(currentUserId)) {
+                await context.read<ChatService>().unmuteChatNotifications(chat.id);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Bildirimler açıldı')),
+                  );
+                }
+              } else {
+                await context.read<ChatService>().muteChatNotifications(chat.id);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Sohbet sessize alındı')),
+                  );
+                }
+              }
+            } catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Hata: $e')),
+                );
+              }
+            }
           }
         },
         itemBuilder: (context) => [
+          PopupMenuItem(
+            value: 'mute',
+            child: Row(
+              children: [
+                Icon(
+                  chat.mutedBy.contains(currentUserId)
+                      ? Icons.notifications_active
+                      : Icons.notifications_off,
+                  color: Theme.of(context).primaryColor,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  chat.mutedBy.contains(currentUserId)
+                      ? 'Bildirimleri Aç'
+                      : 'Sessize Al',
+                ),
+              ],
+            ),
+          ),
           const PopupMenuItem(
             value: 'delete',
             child: Row(
