@@ -14,6 +14,7 @@ class ChatModel {
   final MessageModel? lastMessage;
   final int unreadCount;
   final String? avatar;
+  final List<String> deletedBy;
 
   ChatModel({
     required this.id,
@@ -28,6 +29,7 @@ class ChatModel {
     this.lastMessage,
     this.unreadCount = 0,
     this.avatar,
+    this.deletedBy = const [],
   });
 
   factory ChatModel.fromFirestore(DocumentSnapshot doc) {
@@ -63,6 +65,7 @@ class ChatModel {
           : null,
       unreadCount: data['unreadCount'] as int? ?? 0,
       avatar: data['avatar'] as String?,
+      deletedBy: List<String>.from(data['deletedBy'] as List? ?? []),
     );
   }
 
@@ -80,6 +83,7 @@ class ChatModel {
       'lastMessage': lastMessage?.toMap(),
       'unreadCount': unreadCount,
       'avatar': avatar,
+      'deletedBy': deletedBy,
     };
   }
 
@@ -97,6 +101,7 @@ class ChatModel {
       'lastMessage': lastMessage?.toMap(),
       'unreadCount': unreadCount,
       'avatar': avatar,
+      'deletedBy': deletedBy,
     };
   }
 
@@ -113,6 +118,7 @@ class ChatModel {
     MessageModel? lastMessage,
     int? unreadCount,
     String? avatar,
+    List<String>? deletedBy,
   }) {
     return ChatModel(
       id: id ?? this.id,
@@ -127,6 +133,7 @@ class ChatModel {
       lastMessage: lastMessage ?? this.lastMessage,
       unreadCount: unreadCount ?? this.unreadCount,
       avatar: avatar ?? this.avatar,
+      deletedBy: deletedBy ?? this.deletedBy,
     );
   }
 

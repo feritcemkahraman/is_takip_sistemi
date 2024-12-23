@@ -12,6 +12,7 @@ import '../services/local_storage_service.dart';
 import 'chat_media_screen.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/emoji_picker_widget.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ChatScreen extends StatefulWidget {
   final ChatModel chat;
@@ -35,12 +36,24 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isLoading = false;
   bool _showEmoji = false;
   ChatModel? _createdChat;
+  String get _activeChatId => _createdChat?.id ?? widget.chat.id;
 
   @override
   void initState() {
     super.initState();
     _chatService = context.read<ChatService>();
     _userService = context.read<UserService>();
+    _initializeChat();
+  }
+
+  Future<void> _initializeChat() async {
+    if (widget.isNewChat) {
+      // Önce mevcut sohbeti kontrol et
+      final existingChat = await _chatService.findExistingChat(widget.chat.participants.first);
+      if (existingChat != null) {
+        setState(() => _createdChat = existingChat);
+      }
+    }
     _markMessagesAsRead();
   }
 
@@ -51,8 +64,35 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _markMessagesAsRead() async {
+    final currentUser = _userService.currentUser;
+    if (currentUser == null) return;
+
     if (!widget.isNewChat) {
-      await _chatService.markAllMessagesAsRead(widget.chat.id);
+      final chatRef = FirebaseFirestore.instance
+          .collection('chats')
+          .doc(widget.chat.id);
+      
+      final messagesRef = chatRef
+          .collection('messages')
+          .where('readBy', whereNotIn: [currentUser.id]);
+
+      final messagesSnapshot = await messagesRef.get();
+
+      if (messagesSnapshot.docs.isNotEmpty) {
+        final batch = FirebaseFirestore.instance.batch();
+
+        for (final doc in messagesSnapshot.docs) {
+          final List<dynamic> readBy = List<dynamic>.from(doc.data()['readBy'] ?? []);
+          if (!readBy.contains(currentUser.id)) {
+            batch.update(doc.reference, {
+              'readBy': FieldValue.arrayUnion([currentUser.id])
+            });
+          }
+        }
+
+        batch.update(chatRef, {'unreadCount': 0});
+        await batch.commit();
+      }
     }
   }
 
@@ -204,7 +244,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: Colors.grey[100],
               ),
               child: StreamBuilder<List<MessageModel>>(
-                stream: context.watch<ChatService>().getMessages(widget.chat.id),
+                stream: _chatService.getMessages(_activeChatId),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return Center(child: Text('Hata: ${snapshot.error}'));
@@ -226,7 +266,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     itemCount: messages.length,
                     itemBuilder: (context, index) {
                       final message = messages[index];
-                      final isMe = message.senderId == context.read<UserService>().currentUser?.id;
+                      final isMe = message.senderId == _userService.currentUser?.id;
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),

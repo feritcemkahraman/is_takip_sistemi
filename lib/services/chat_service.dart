@@ -63,6 +63,7 @@ class ChatService extends ChangeNotifier {
       'lastMessage': null,
       'unreadCount': 0,
       'avatar': null,
+      'deletedBy': [],
     };
 
     // Sohbeti kaydet
@@ -82,6 +83,7 @@ class ChatService extends ChangeNotifier {
       lastMessage: null,
       unreadCount: 0,
       avatar: null,
+      deletedBy: const [],
     );
   }
 
@@ -122,23 +124,26 @@ class ChatService extends ChangeNotifier {
 
     final chatData = chatDoc.data() as Map<String, dynamic>;
     List<String> participants = List<String>.from(chatData['participants'] as List);
+    List<String> deletedBy = List<String>.from(chatData['deletedBy'] ?? []);
     
-    // Eğer gönderen kullanıcı katılımcılar listesinde yoksa, ekle
-    if (!participants.contains(currentUser.id)) {
+    // Eğer gönderen kullanıcı katılımcılar listesinde yoksa veya daha önce sohbeti silmişse
+    if (!participants.contains(currentUser.id) || deletedBy.contains(currentUser.id)) {
       participants.add(currentUser.id);
+      deletedBy.remove(currentUser.id);
       batch.update(_firestore.collection(_collection).doc(chatId), {
         'participants': participants,
+        'deletedBy': deletedBy,
       });
     }
 
-    // Yeni mesaj referansı oluştur
+    final now = DateTime.now();
     final messageRef = _firestore
         .collection(_collection)
         .doc(chatId)
         .collection(_messagesCollection)
         .doc();
-
-    final now = DateTime.now();
+    
+    // Yeni mesaj oluştur
     final message = MessageModel(
       id: messageRef.id,
       chatId: chatId,
@@ -146,51 +151,48 @@ class ChatService extends ChangeNotifier {
       content: content,
       createdAt: now,
       readBy: [currentUser.id],
-      attachmentUrl: attachmentUrl,
       type: type,
+      attachmentUrl: attachmentUrl,
     );
 
-    // Mesajı batch'e ekle
+    // Mesajı kaydet
     batch.set(messageRef, message.toFirestore());
-    
-    // Okunmamış mesaj sayısını güncelle
-    final currentUnreadCount = chatData['unreadCount'] as int? ?? 0;
-    final newUnreadCount = currentUnreadCount + (participants.length - 1); // Gönderen hariç
 
-    // Sohbetin son mesajını ve okunmamış mesaj sayısını güncelle
+    // Diğer katılımcıların sayısını hesapla
+    final otherParticipantsCount = participants.where((id) => id != currentUser.id).length;
+
+    // Chat belgesini güncelle
     batch.update(_firestore.collection(_collection).doc(chatId), {
-      'lastMessage': message.toMap(),
+      'lastMessage': message.toFirestore(),
       'updatedAt': Timestamp.fromDate(now),
-      'unreadCount': newUnreadCount,
+      'unreadCount': otherParticipantsCount,
     });
 
     // Batch'i commit et
     await batch.commit();
 
-    // Bildirim gönderilecek kullanıcıları bul (gönderen hariç)
-    final otherParticipants = participants.where((id) => id != currentUser.id);
-
-    // Her bir kullanıcıya bildirim gönder
-    for (final userId in otherParticipants) {
-      final otherUser = await _userService.getUserById(userId);
-      if (otherUser?.fcmToken != null) {
-        final notificationService = NotificationService();
-        await notificationService.sendNotification(
-          token: otherUser!.fcmToken!,
-          title: chatData['isGroup'] == true 
-              ? '${chatData['name']}: ${currentUser.name}\'den yeni mesaj'
-              : '${currentUser.name}\'den yeni mesaj',
-          body: type == MessageModel.typeText ? content : 'Dosya gönderildi',
-          data: {
-            'type': 'message',
-            'chatId': chatId,
-            'senderId': currentUser.id,
-          },
-        );
+    // Bildirim gönder
+    for (final participantId in participants) {
+      if (participantId != currentUser.id) {
+        final otherUser = await _userService.getUserById(participantId);
+        if (otherUser?.fcmToken != null) {
+          final notificationService = NotificationService();
+          await notificationService.sendNotification(
+            token: otherUser!.fcmToken!,
+            title: chatData['isGroup'] == true 
+                ? '${chatData['name']}: ${currentUser.name}\'den yeni mesaj'
+                : '${currentUser.name}\'den yeni mesaj',
+            body: type == MessageModel.typeText ? content : 'Dosya gönderildi',
+            data: {
+              'type': 'message',
+              'chatId': chatId,
+              'senderId': currentUser.id,
+            },
+          );
+        }
       }
     }
 
-    // Değişiklikleri bildir
     notifyListeners();
   }
 
@@ -222,43 +224,57 @@ class ChatService extends ChangeNotifier {
     final currentUser = _userService.currentUser;
     if (currentUser == null) return Stream.value([]);
 
-    // Sohbete girildiğinde okunmamış mesaj sayısını sıfırla
-    resetUnreadCount(chatId);
-
-    return _firestore
+    // Mesajları dinle
+    final messagesStream = _firestore
         .collection(_collection)
         .doc(chatId)
         .collection(_messagesCollection)
         .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-          final messages = snapshot.docs
-              .map((doc) => MessageModel.fromFirestore(doc))
-              .toList();
+        .snapshots();
 
-          // Mesajları işaretleyelim
-          final batch = _firestore.batch();
-          bool needsBatchCommit = false;
+    // Chat belgesini dinle
+    final chatStream = _firestore
+        .collection(_collection)
+        .doc(chatId)
+        .snapshots();
 
-          for (final doc in snapshot.docs) {
-            if (!doc.data()['readBy'].contains(currentUser.id)) {
-              batch.update(doc.reference, {
-                'readBy': FieldValue.arrayUnion([currentUser.id])
-              });
-              needsBatchCommit = true;
-            }
-          }
+    // İki stream'i birleştir
+    return messagesStream.asyncMap((messagesSnapshot) async {
+      // Chat belgesini al
+      final chatDoc = await chatStream.first;
+      if (!chatDoc.exists) return [];
 
-          // Eğer okunmamış mesaj varsa batch'i commit edelim
-          if (needsBatchCommit) {
-            batch.commit().then((_) {
-              // Batch işlemi tamamlandığında bildirim yap
-              notifyListeners();
+      final messages = messagesSnapshot.docs
+          .map((doc) => MessageModel.fromFirestore(doc))
+          .toList();
+
+      if (messages.isNotEmpty) {
+        final batch = _firestore.batch();
+        bool needsBatchCommit = false;
+
+        for (final doc in messagesSnapshot.docs) {
+          final data = doc.data();
+          final List<dynamic> readBy = List<dynamic>.from(data['readBy'] ?? []);
+          
+          if (!readBy.contains(currentUser.id)) {
+            batch.update(doc.reference, {
+              'readBy': FieldValue.arrayUnion([currentUser.id])
             });
+            needsBatchCommit = true;
           }
+        }
 
-          return messages;
-        });
+        if (needsBatchCommit) {
+          await batch.commit();
+          // Chat belgesini güncelle
+          await _firestore.collection(_collection).doc(chatId).update({
+            'unreadCount': 0
+          });
+        }
+      }
+
+      return messages;
+    });
   }
 
   Stream<List<ChatModel>> getChatList() {
@@ -289,36 +305,19 @@ class ChatService extends ChangeNotifier {
 
       final chatData = chatDoc.data() as Map<String, dynamic>;
       List<String> participants = List<String>.from(chatData['participants'] as List);
+      List<String> deletedBy = List<String>.from(chatData['deletedBy'] ?? []);
 
-      // Kullanıcıyı katılımcılardan çıkar
+      // Kullanıcıyı katılımcılardan çıkar ve deletedBy listesine ekle
       participants.remove(currentUser.id);
-
-      if (participants.isEmpty) {
-        // Eğer başka katılımcı kalmadıysa sohbeti tamamen sil
-        final messagesSnapshot = await _firestore
-            .collection(_collection)
-            .doc(chatId)
-            .collection(_messagesCollection)
-            .get();
-
-        final batch = _firestore.batch();
-        
-        // Mesajları batch'e ekle
-        for (var doc in messagesSnapshot.docs) {
-          batch.delete(doc.reference);
-        }
-
-        // Sohbeti batch'e ekle
-        batch.delete(_firestore.collection(_collection).doc(chatId));
-
-        // Batch'i commit et
-        await batch.commit();
-      } else {
-        // Sadece kullanıcıyı katılımcılardan çıkar
-        await _firestore.collection(_collection).doc(chatId).update({
-          'participants': participants,
-        });
+      if (!deletedBy.contains(currentUser.id)) {
+        deletedBy.add(currentUser.id);
       }
+
+      // Sohbeti güncelle
+      await _firestore.collection(_collection).doc(chatId).update({
+        'participants': participants,
+        'deletedBy': deletedBy,
+      });
       
       notifyListeners();
     } catch (e) {
@@ -405,5 +404,16 @@ class ChatService extends ChangeNotifier {
     });
     
     notifyListeners();
+  }
+
+  Future<List<DocumentSnapshot>> getUnreadMessages(String chatId, String userId) async {
+    final messagesSnapshot = await _firestore
+        .collection(_collection)
+        .doc(chatId)
+        .collection(_messagesCollection)
+        .where('readBy', arrayContains: userId, isEqualTo: false)
+        .get();
+
+    return messagesSnapshot.docs;
   }
 } 

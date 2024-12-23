@@ -147,17 +147,37 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
 
     if (selectedUser != null && mounted) {
+      final chatService = context.read<ChatService>();
+      final existingChat = await chatService.findExistingChat(selectedUser.id);
+      
+      if (existingChat != null) {
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatScreen(
+              chat: existingChat,
+              isNewChat: false,
+            ),
+          ),
+        );
+        return;
+      }
+
+      final now = DateTime.now();
+      final tempId = 'temp_${now.millisecondsSinceEpoch}_${currentUser.id}_${selectedUser.id}';
+      
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => ChatScreen(
             chat: ChatModel(
-              id: '',
+              id: tempId,
               name: selectedUser.name,
-              participants: [selectedUser.id],
+              participants: [selectedUser.id, currentUser.id],
               createdBy: currentUser.id,
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
+              createdAt: now,
+              updatedAt: now,
               isGroup: false,
               mutedBy: const [],
               messages: const [],
