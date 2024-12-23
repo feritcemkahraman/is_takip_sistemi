@@ -132,6 +132,7 @@ class ChatService extends ChangeNotifier {
       type: type,
     );
 
+    // Mesajı kaydet
     await messageRef.set(message.toFirestore());
 
     // Sohbetin son mesajını güncelle
@@ -140,29 +141,41 @@ class ChatService extends ChangeNotifier {
       'updatedAt': Timestamp.fromDate(now),
     });
 
-    // Karşı kullanıcının FCM token'ını al ve bildirim gönder
+    // Sohbeti al ve diğer kullanıcılara bildirim gönder
     final chatDoc = await _firestore.collection(_collection).doc(chatId).get();
-    final chatData = chatDoc.data() as Map<String, dynamic>;
-    final otherUserId = (chatData['participants'] as List<dynamic>)
-        .firstWhere((id) => id != currentUser.id);
+    if (!chatDoc.exists) return;
 
-    final otherUser = await _userService.getUserById(otherUserId);
-    if (otherUser?.fcmToken != null) {
-      final notificationService = NotificationService();
-      await notificationService.sendNotification(
-        token: otherUser!.fcmToken!,
-        title: '${currentUser.name}\'den yeni mesaj',
-        body: type == MessageModel.typeText ? content : 'Dosya gönderildi',
-        data: {
-          'type': 'message',
-          'chatId': chatId,
-          'senderId': currentUser.id,
-        },
-      );
+    final chatData = chatDoc.data() as Map<String, dynamic>;
+    final participants = List<String>.from(chatData['participants'] as List);
+    
+    // Bildirim gönderilecek kullanıcıları bul (gönderen hariç)
+    final otherParticipants = participants.where((id) => id != currentUser.id);
+
+    // Her bir kullanıcıya bildirim gönder
+    for (final userId in otherParticipants) {
+      final otherUser = await _userService.getUserById(userId);
+      if (otherUser?.fcmToken != null) {
+        final notificationService = NotificationService();
+        await notificationService.sendNotification(
+          token: otherUser!.fcmToken!,
+          title: chatData['isGroup'] == true 
+              ? '${chatData['name']}: ${currentUser.name}\'den yeni mesaj'
+              : '${currentUser.name}\'den yeni mesaj',
+          body: type == MessageModel.typeText ? content : 'Dosya gönderildi',
+          data: {
+            'type': 'message',
+            'chatId': chatId,
+            'senderId': currentUser.id,
+          },
+        );
+      }
     }
   }
 
   Stream<List<MessageModel>> getMessages(String chatId) {
+    final currentUser = _userService.currentUser;
+    if (currentUser == null) return Stream.value([]);
+
     return _firestore
         .collection(_collection)
         .doc(chatId)
@@ -170,10 +183,30 @@ class ChatService extends ChangeNotifier {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => MessageModel.fromFirestore(doc))
-          .toList();
-    });
+          final messages = snapshot.docs
+              .map((doc) => MessageModel.fromFirestore(doc))
+              .toList();
+
+          // Mesajları işaretleyelim
+          final batch = _firestore.batch();
+          bool needsBatchCommit = false;
+
+          for (final doc in snapshot.docs) {
+            if (!doc.data()['readBy'].contains(currentUser.id)) {
+              batch.update(doc.reference, {
+                'readBy': FieldValue.arrayUnion([currentUser.id])
+              });
+              needsBatchCommit = true;
+            }
+          }
+
+          // Eğer okunmamış mesaj varsa batch'i commit edelim
+          if (needsBatchCommit) {
+            batch.commit();
+          }
+
+          return messages;
+        });
   }
 
   Stream<List<ChatModel>> getChatList() {

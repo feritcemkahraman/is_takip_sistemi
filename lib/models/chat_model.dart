@@ -129,4 +129,20 @@ class ChatModel {
       avatar: avatar ?? this.avatar,
     );
   }
+
+  int getUnreadCount(String userId) {
+    if (lastMessage == null) return 0;
+    return unreadCount;
+  }
+
+  String getChatName(String currentUserId) {
+    if (isGroup) return name;
+    
+    // Birebir sohbetlerde diğer kullanıcının adını göster
+    final otherParticipant = participants.firstWhere(
+      (id) => id != currentUserId,
+      orElse: () => '',
+    );
+    return name.isEmpty ? otherParticipant : name;
+  }
 } 
