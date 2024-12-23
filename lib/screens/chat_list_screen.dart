@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/chat_model.dart';
-import '../models/user_model.dart';
 import '../services/chat_service.dart';
 import '../services/user_service.dart';
-import '../services/auth_service.dart';
-import '../widgets/user_search_delegate.dart';
+import '../models/chat_model.dart';
+import '../models/user_model.dart';
 import 'chat_screen.dart';
+import '../widgets/user_search_delegate.dart';
 
 class ChatListScreen extends StatefulWidget {
-  const ChatListScreen({Key? key}) : super(key: key);
+  const ChatListScreen({super.key});
 
   @override
   State<ChatListScreen> createState() => _ChatListScreenState();
@@ -19,21 +18,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
   bool _isLoading = false;
 
   Future<void> _showNewChatDialog(BuildContext context) async {
+    final userService = context.read<UserService>();
+    final chatService = context.read<ChatService>();
+    final currentUser = userService.currentUser;
+    if (currentUser == null) return;
+
+    setState(() => _isLoading = true);
+
     try {
-      final userService = context.read<UserService>();
-      final chatService = context.read<ChatService>();
-      final currentUser = userService.currentUser;
-
-      if (currentUser == null) return;
-
-      setState(() => _isLoading = true);
-
       final users = await userService.getAllUsers();
-      users.removeWhere((user) => user.id == currentUser.id);
-
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
@@ -43,12 +36,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
               actions: [
                 IconButton(
                   icon: const Icon(Icons.search),
-                  onPressed: () {
+                  onPressed: () async {
+                    final users = await userService.getAllUsers();
+                    if (!context.mounted) return;
                     showSearch(
                       context: context,
                       delegate: UserSearchDelegate(
+                        users: users,
+                        currentUserId: currentUser.id,
                         userService: userService,
-                        chatService: chatService,
                       ),
                     );
                   },
@@ -59,16 +55,18 @@ class _ChatListScreenState extends State<ChatListScreen> {
               itemCount: users.length,
               itemBuilder: (context, index) {
                 final user = users[index];
+                if (user.id == currentUser.id) return const SizedBox.shrink();
+                
                 return ListTile(
                   leading: CircleAvatar(
                     backgroundColor: Theme.of(context).primaryColor,
-                    child: Text(user.name[0].toUpperCase()),
+                    backgroundImage: user.avatar != null ? NetworkImage(user.avatar!) : null,
+                    child: user.avatar == null ? Text(user.name[0].toUpperCase()) : null,
                   ),
                   title: Text(user.name),
                   subtitle: Text(user.department),
                   onTap: () async {
                     try {
-                      // Önce mevcut sohbeti kontrol et
                       final existingChat = await chatService.findExistingChat(user.id);
                       
                       if (existingChat != null) {
@@ -81,18 +79,18 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         return;
                       }
 
-                      // Mevcut sohbet yoksa, geçici bir chat objesi oluştur
                       final now = DateTime.now();
                       final tempChat = ChatModel(
                         id: 'temp_${now.millisecondsSinceEpoch}',
                         name: user.name,
-                        participants: [user.id, currentUser.id],
+                        participants: [user.id],
                         createdBy: currentUser.id,
                         createdAt: now,
                         updatedAt: now,
                         isGroup: false,
-                        mutedBy: [],
-                        messages: [],
+                        mutedBy: const [],
+                        messages: const [],
+                        unreadCount: 0,
                       );
 
                       if (!context.mounted) return;
@@ -105,7 +103,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         ),
                       );
                     } catch (e) {
-                      if (!context.mounted) return;
+                      if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('Hata: $e')),
                       );
@@ -119,10 +117,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Hata: $e')),
       );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -139,13 +140,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
       delegate: UserSearchDelegate(
         users: users,
         currentUserId: currentUser.id,
+        userService: context.read<UserService>(),
       ),
     );
 
     if (selectedUser != null && mounted) {
       final chatService = context.read<ChatService>();
       
-      // Mevcut sohbeti kontrol et
       final existingChat = await chatService.findExistingChat(selectedUser.id);
       
       if (existingChat != null) {
@@ -159,7 +160,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
         return;
       }
 
-      // Yeni sohbet oluştur
       final chat = await chatService.createChat(
         name: selectedUser.name,
         participants: [selectedUser.id],
@@ -178,38 +178,127 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
+  void _showChatOptions(BuildContext context, ChatModel chat) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(
+                chat.mutedBy.contains(context.read<UserService>().currentUser?.id)
+                    ? Icons.notifications_active
+                    : Icons.notifications_off,
+                color: Theme.of(context).primaryColor,
+              ),
+              title: Text(
+                chat.mutedBy.contains(context.read<UserService>().currentUser?.id)
+                    ? 'Bildirimleri Aç'
+                    : 'Sessize Al',
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                try {
+                  if (chat.mutedBy.contains(context.read<UserService>().currentUser?.id)) {
+                    await context.read<ChatService>().unmuteChatNotifications(chat.id);
+                  } else {
+                    await context.read<ChatService>().muteChatNotifications(chat.id);
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Hata: $e')),
+                    );
+                  }
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Sohbeti Sil', style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                Navigator.pop(context);
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Sohbeti Sil'),
+                    content: const Text('Bu sohbeti silmek istediğinizden emin misiniz?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('İptal'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        child: const Text('Sil'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm == true && mounted) {
+                  try {
+                    await context.read<ChatService>().deleteChat(chat.id);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Sohbet silindi')),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Hata: $e')),
+                      );
+                    }
+                  }
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = context.watch<UserService>().currentUser;
     if (currentUser == null) return const Scaffold();
 
     return Scaffold(
+      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Text('Sohbetler'),
+        title: const Text(
+          'Sohbetler',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () {
-              showSearch(
-                context: context,
-                delegate: UserSearchDelegate(
-                  userService: context.read<UserService>(),
-                  chatService: context.read<ChatService>(),
-                ),
-              );
-            },
+            onPressed: _showUserSearch,
           ),
         ],
+        elevation: 0,
       ),
       body: StreamBuilder<List<ChatModel>>(
         stream: context.read<ChatService>().getUserChats(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(child: Text('Hata: ${snapshot.error}'));
+            return Center(
+              child: Text('Hata: ${snapshot.error}'),
+            );
           }
 
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
           }
 
           final chats = snapshot.data!;
@@ -230,6 +319,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -237,6 +327,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     onPressed: () => _showNewChatDialog(context),
                     icon: const Icon(Icons.add),
                     label: const Text('Yeni Sohbet'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -245,105 +344,105 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
           return ListView.builder(
             itemCount: chats.length,
+            padding: const EdgeInsets.symmetric(vertical: 8),
             itemBuilder: (context, index) {
               final chat = chats[index];
               final otherParticipants = chat.participants
                   .where((id) => id != currentUser.id)
                   .toList();
 
-              return Dismissible(
-                key: Key(chat.id),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20),
-                  color: Colors.red,
-                  child: const Icon(
-                    Icons.delete_outline,
-                    color: Colors.white,
-                  ),
+              return Card(
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
                 ),
-                confirmDismiss: (direction) async {
-                  return await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Sohbeti Sil'),
-                      content: const Text('Bu sohbeti silmek istediğinizden emin misiniz?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('İptal'),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          style: TextButton.styleFrom(foregroundColor: Colors.red),
-                          child: const Text('Sil'),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-                onDismissed: (direction) async {
-                  try {
-                    await context.read<ChatService>().deleteChat(chat.id);
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Hata: $e')),
-                    );
-                  }
-                },
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
                 child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   leading: CircleAvatar(
+                    radius: 28,
                     backgroundColor: Theme.of(context).primaryColor,
-                    child: Text(
-                      chat.isGroup
-                          ? chat.name[0].toUpperCase()
-                          : otherParticipants.isNotEmpty
-                              ? chat.name[0].toUpperCase()
-                              : '?',
-                    ),
+                    backgroundImage: chat.avatar != null
+                        ? NetworkImage(chat.avatar!)
+                        : null,
+                    child: chat.avatar == null
+                        ? Text(
+                            chat.name[0].toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : null,
                   ),
                   title: Row(
                     children: [
                       Expanded(
                         child: Text(
                           chat.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (chat.mutedBy.contains(currentUser.id))
-                        const Icon(
-                          Icons.notifications_off,
-                          size: 16,
-                          color: Colors.grey,
+                      if (chat.lastMessage != null)
+                        Text(
+                          _formatTime(chat.lastMessage!.createdAt),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
                         ),
                     ],
                   ),
                   subtitle: chat.lastMessage != null
-                      ? Text(
-                          chat.lastMessage!.content,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        )
-                      : null,
-                  trailing: chat.unreadCount > 0
-                      ? Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).primaryColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            chat.unreadCount.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
+                      ? Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                chat.lastMessage!.content,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                ),
+                              ),
                             ),
-                          ),
+                            if (chat.unreadCount > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).primaryColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  chat.unreadCount.toString(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                          ],
                         )
-                      : null,
+                      : const Text('Yeni sohbet'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.more_vert),
+                    onPressed: () => _showChatOptions(context, chat),
+                  ),
                   onTap: () {
                     Navigator.push(
                       context,
@@ -359,18 +458,25 @@ class _ChatListScreenState extends State<ChatListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _isLoading ? null : () => _showNewChatDialog(context),
-        child: _isLoading
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
-            : const Icon(Icons.add),
+        onPressed: () => _showNewChatDialog(context),
+        child: const Icon(Icons.message),
+        tooltip: 'Yeni Sohbet',
       ),
     );
+  }
+
+  String _formatTime(DateTime time) {
+    final now = DateTime.now();
+    final difference = now.difference(time);
+
+    if (difference.inDays > 0) {
+      return '${difference.inDays}g';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}s';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}d';
+    } else {
+      return 'şimdi';
+    }
   }
 } 

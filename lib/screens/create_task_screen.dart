@@ -203,7 +203,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
 
         if (mounted) {
           setState(() => _isLoading = false);
-          Navigator.of(context).pushNamed('/tasks-screen');
+          Navigator.of(context).pushReplacementNamed('/admin-dashboard-screen');
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Görev başarıyla oluşturuldu')),
           );

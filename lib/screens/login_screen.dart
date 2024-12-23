@@ -43,7 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (user.role == AppConstants.roleAdmin) {
           Navigator.pushReplacementNamed(context, '/admin-dashboard-screen');
         } else {
-          Navigator.pushReplacementNamed(context, '/tasks-screen');
+          Navigator.pushReplacementNamed(context, '/employee-dashboard-screen');
         }
       } catch (e) {
         if (!mounted) return;
@@ -122,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 16),
                 TextButton(
                   onPressed: () {
-                    Navigator.pushNamed(context, '/register');
+                    Navigator.pushNamed(context, '/register-screen');
                   },
                   child: const Text('Hesabınız yok mu? Kayıt olun'),
                 ),

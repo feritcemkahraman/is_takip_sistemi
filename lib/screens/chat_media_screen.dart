@@ -16,12 +16,13 @@ class ChatMediaScreen extends StatefulWidget {
 
 class _ChatMediaScreenState extends State<ChatMediaScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final _chatService = ChatService(userService: UserService());
+  late final ChatService _chatService;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _chatService = context.read<ChatService>();
   }
 
   @override
@@ -43,7 +44,7 @@ class _ChatMediaScreenState extends State<ChatMediaScreen> with SingleTickerProv
         }
 
         final messages = snapshot.data!
-            .where((message) => message.attachments.any((a) => a.type == type))
+            .where((message) => message.type == type && message.attachmentUrl != null)
             .toList();
 
         if (messages.isEmpty) {
@@ -60,32 +61,33 @@ class _ChatMediaScreenState extends State<ChatMediaScreen> with SingleTickerProv
           itemCount: messages.length,
           itemBuilder: (context, index) {
             final message = messages[index];
-            final attachment = message.attachments.firstWhere((a) => a.type == type);
-            return _buildMediaPreview(message, attachment);
+            return _buildMediaPreview(message);
           },
         );
       },
     );
   }
 
-  Widget _buildMediaPreview(MessageModel message, MessageAttachment attachment) {
-    switch (attachment.type) {
+  Widget _buildMediaPreview(MessageModel message) {
+    if (message.attachmentUrl == null) return const SizedBox();
+
+    switch (message.type) {
       case MessageModel.typeImage:
         return InkWell(
-          onTap: () => _showImageViewer(attachment.url),
+          onTap: () => _showImageViewer(message.attachmentUrl!),
           child: Image.network(
-            attachment.url,
+            message.attachmentUrl!,
             fit: BoxFit.cover,
           ),
         );
       case MessageModel.typeVideo:
         return InkWell(
-          onTap: () => _showVideoPlayer(attachment.url),
+          onTap: () => _showVideoPlayer(message.attachmentUrl!),
           child: Stack(
             fit: StackFit.expand,
             children: [
               Image.network(
-                attachment.url,
+                message.attachmentUrl!,
                 fit: BoxFit.cover,
               ),
               const Center(
@@ -100,7 +102,7 @@ class _ChatMediaScreenState extends State<ChatMediaScreen> with SingleTickerProv
         );
       case MessageModel.typeVoice:
         return InkWell(
-          onTap: () => _playAudio(attachment.url),
+          onTap: () => _playAudio(message.attachmentUrl!),
           child: Container(
             color: Colors.grey[200],
             child: const Center(
@@ -110,19 +112,19 @@ class _ChatMediaScreenState extends State<ChatMediaScreen> with SingleTickerProv
         );
       case MessageModel.typeFile:
         return InkWell(
-          onTap: () => _openFile(attachment.url),
+          onTap: () => _openFile(message.attachmentUrl!),
           child: Container(
             color: Colors.grey[200],
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  _getFileIcon(attachment.fileExtension ?? ''),
+                  _getFileIcon(message.content.split('.').last),
                   size: 32,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  attachment.name,
+                  message.content,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,

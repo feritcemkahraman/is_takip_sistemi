@@ -1,21 +1,46 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../models/task_model.dart';
 import '../models/comment_model.dart';
 import '../services/local_storage_service.dart';
 import '../services/notification_service.dart';
 import '../services/user_service.dart';
+import 'package:path/path.dart' as path;
 
 class TaskService with ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final String _collection = 'tasks';
+  final UserService _userService;
+
+  TaskService(this._userService);
+
+  // Kullanıcı rolünü kontrol et
+  Future<bool> _isUserAdmin() async {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) return false;
+
+    final userDoc = await _firestore.collection('users').doc(currentUser.uid).get();
+    return userDoc.data()?['role'] == 'admin';
+  }
 
   // Tüm görevleri getir
   Future<List<TaskModel>> getAllTasks() async {
     try {
-      final querySnapshot = await _firestore.collection(_collection).get();
+      final currentUser = _auth.currentUser;
+      if (currentUser == null) return [];
+
+      final isAdmin = await _isUserAdmin();
+      Query query = _firestore.collection(_collection);
+
+      if (!isAdmin) {
+        query = query.where('assignedTo', isEqualTo: currentUser.uid);
+      }
+
+      final querySnapshot = await query.get();
       return querySnapshot.docs
           .map((doc) => TaskModel.fromFirestore(doc))
           .toList();
@@ -28,12 +53,21 @@ class TaskService with ChangeNotifier {
   // Aktif görevleri getir
   Future<List<TaskModel>> getActiveTasks() async {
     try {
-      final querySnapshot = await _firestore
-          .collection(_collection)
-          .where('status', isEqualTo: 'active')
+      final currentUser = _auth.currentUser;
+      if (currentUser == null) return [];
+
+      final isAdmin = await _isUserAdmin();
+      Query query = _firestore.collection(_collection).where('status', isEqualTo: 'active');
+
+      if (!isAdmin) {
+        query = query.where('assignedTo', isEqualTo: currentUser.uid);
+      }
+
+      final querySnapshot = await query
           .orderBy('deadline')
           .orderBy('__name__')
           .get();
+
       return querySnapshot.docs
           .map((doc) => TaskModel.fromFirestore(doc))
           .toList();
@@ -46,12 +80,21 @@ class TaskService with ChangeNotifier {
   // Bekleyen görevleri getir
   Future<List<TaskModel>> getPendingTasks() async {
     try {
-      final querySnapshot = await _firestore
-          .collection(_collection)
-          .where('status', isEqualTo: 'pending')
+      final currentUser = _auth.currentUser;
+      if (currentUser == null) return [];
+
+      final isAdmin = await _isUserAdmin();
+      Query query = _firestore.collection(_collection).where('status', isEqualTo: 'pending');
+
+      if (!isAdmin) {
+        query = query.where('assignedTo', isEqualTo: currentUser.uid);
+      }
+
+      final querySnapshot = await query
           .orderBy('deadline')
           .orderBy('__name__')
           .get();
+
       return querySnapshot.docs
           .map((doc) => TaskModel.fromFirestore(doc))
           .toList();
@@ -64,12 +107,21 @@ class TaskService with ChangeNotifier {
   // Tamamlanan görevleri getir
   Future<List<TaskModel>> getCompletedTasks() async {
     try {
-      final querySnapshot = await _firestore
-          .collection(_collection)
-          .where('status', isEqualTo: 'completed')
+      final currentUser = _auth.currentUser;
+      if (currentUser == null) return [];
+
+      final isAdmin = await _isUserAdmin();
+      Query query = _firestore.collection(_collection).where('status', isEqualTo: 'completed');
+
+      if (!isAdmin) {
+        query = query.where('assignedTo', isEqualTo: currentUser.uid);
+      }
+
+      final querySnapshot = await query
           .orderBy('completedAt', descending: true)
           .orderBy('__name__', descending: true)
           .get();
+
       return querySnapshot.docs
           .map((doc) => TaskModel.fromFirestore(doc))
           .toList();
@@ -88,43 +140,70 @@ class TaskService with ChangeNotifier {
     required int priority,
   }) async {
     try {
-      final currentUser = _auth.currentUser;
-      if (currentUser == null) throw Exception('Kullanıcı oturumu bulunamadı');
+      print('Creating task with following details:'); // Debug log
+      print('Title: $title'); // Debug log
+      print('AssignedTo: $assignedTo'); // Debug log
+      print('Deadline: $deadline'); // Debug log
+      print('Priority: $priority'); // Debug log
 
-      final task = await _firestore.collection(_collection).add({
+      // Görevi oluştur
+      final taskData = {
         'title': title,
         'description': description,
         'assignedTo': assignedTo,
-        'createdBy': currentUser.uid,
-        'deadline': deadline,
+        'createdBy': _auth.currentUser?.uid ?? 'system',
+        'deadline': Timestamp.fromDate(deadline),
         'priority': priority,
         'status': 'active',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
+        'completedAt': null,
         'attachments': [],
-      });
+        'metadata': {},
+      };
 
-      // Görev atama bildirimi gönder
-      final userService = UserService();
-      final notificationService = NotificationService(userService: userService);
-      final creator = await userService.getUserById(currentUser.uid);
+      print('Task data prepared: $taskData'); // Debug log
+
+      final task = await _firestore.collection(_collection).add(taskData);
       
-      if (creator != null) {
-        await notificationService.sendNotification(
-          userId: assignedTo,
-          title: 'Yeni Görev',
-          body: '${creator.name} size yeni bir görev atadı: $title',
-          data: {
-            'type': 'task_assigned',
-            'taskId': task.id,
-          },
-        );
+      print('Task created with ID: ${task.id}'); // Debug log
+
+      // Oluşturulan görevi kontrol et
+      final createdTask = await task.get();
+      print('Created task data: ${createdTask.data()}'); // Debug log
+
+      // Görev atama bildirimi göndermeyi dene
+      try {
+        final userService = UserService();
+        final assignedUser = await userService.getUserById(assignedTo);
+        
+        if (assignedUser?.fcmToken != null) {
+          final notificationService = NotificationService(userService: userService);
+          await notificationService.sendNotification(
+            token: assignedUser!.fcmToken!,
+            title: 'Yeni Görev',
+            body: 'Size yeni bir görev atandı: $title',
+            data: {
+              'type': 'task_assigned',
+              'taskId': task.id,
+            },
+          );
+          print('Notification sent to user: $assignedTo'); // Debug log
+        } else {
+          print('User FCM token not found for: $assignedTo'); // Debug log
+        }
+      } catch (e) {
+        print('Bildirim gönderme hatası: $e');
       }
+
+      // Değişiklikleri dinleyicilere bildir
+      notifyListeners();
 
       return task.id;
     } catch (e) {
       print('Error creating task: $e');
-      rethrow;
+      print('Stack trace: ${StackTrace.current}'); // Debug log
+      throw Exception('Görev oluşturulurken bir hata oluştu: $e');
     }
   }
 
@@ -173,11 +252,18 @@ class TaskService with ChangeNotifier {
       // Bildirim gönder
       final task = await getTask(taskId);
       if (task != null) {
-        await notificationService.sendNotification(
-          userId: task.createdBy,
-          title: 'Görev Tamamlandı',
-          body: '${task.title} görevi tamamlandı',
-        );
+        final creator = await userService.getUserById(task.createdBy);
+        if (creator != null) {
+          await notificationService.sendNotification(
+            token: creator.fcmToken ?? '',
+            title: 'Görev Tamamlandı',
+            body: '${task.title} görevi tamamlandı',
+            data: {
+              'type': 'task_completed',
+              'taskId': taskId,
+            },
+          );
+        }
       }
     } catch (e) {
       print('Görev tamamlama hatası: $e');
@@ -336,17 +422,18 @@ class TaskService with ChangeNotifier {
   // Aktif görevleri stream olarak getir
   Stream<List<TaskModel>> getActiveTasksStream() {
     try {
+      final currentUser = _userService.currentUser;
+      if (currentUser == null) return Stream.value([]);
+
       return _firestore
           .collection(_collection)
+          .where('assignedTo', isEqualTo: currentUser.id)
           .where('status', isEqualTo: 'active')
-          .orderBy('deadline')
-          .orderBy('__name__')
           .snapshots()
           .map((snapshot) => snapshot.docs
               .map((doc) => TaskModel.fromFirestore(doc))
               .toList());
     } catch (e) {
-      print('Error getting active tasks stream: $e');
       return Stream.value([]);
     }
   }
@@ -381,15 +468,23 @@ class TaskService with ChangeNotifier {
     }
   }
 
+  // Tamamlanan görevleri stream olarak getir
   Stream<List<TaskModel>> getCompletedTasksStream() {
-    return _firestore
-        .collection(_collection)
-        .where('status', isEqualTo: 'completed')
-        .orderBy('completedAt', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => TaskModel.fromFirestore(doc))
-            .toList());
+    try {
+      final currentUser = _userService.currentUser;
+      if (currentUser == null) return Stream.value([]);
+
+      return _firestore
+          .collection(_collection)
+          .where('assignedTo', isEqualTo: currentUser.id)
+          .where('status', isEqualTo: 'completed')
+          .snapshots()
+          .map((snapshot) => snapshot.docs
+              .map((doc) => TaskModel.fromFirestore(doc))
+              .toList());
+    } catch (e) {
+      return Stream.value([]);
+    }
   }
 
   Future<TaskModel?> getTask(String taskId) async {
@@ -399,6 +494,313 @@ class TaskService with ChangeNotifier {
       return TaskModel.fromFirestore(doc);
     } catch (e) {
       print('Error getting task: $e');
+      return null;
+    }
+  }
+
+  // Bugün teslim edilecek görevleri getir
+  Future<List<TaskModel>> getTodayTasks() async {
+    try {
+      final userService = UserService();
+      final currentUser = userService.currentUser;
+      if (currentUser == null) return [];
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = today.add(const Duration(days: 1));
+
+      final querySnapshot = await _firestore
+          .collection(_collection)
+          .where('assignedTo', isEqualTo: currentUser.id)
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => TaskModel.fromFirestore(doc))
+          .where((task) => 
+              task.deadline.isAfter(today) &&
+              task.deadline.isBefore(tomorrow))
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Geciken görevleri getir
+  Future<List<TaskModel>> getOverdueTasks() async {
+    try {
+      final userService = UserService();
+      final currentUser = userService.currentUser;
+      if (currentUser == null) return [];
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      final querySnapshot = await _firestore
+          .collection(_collection)
+          .where('assignedTo', isEqualTo: currentUser.id)
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => TaskModel.fromFirestore(doc))
+          .where((task) => task.deadline.isBefore(today))
+          .toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Yaklaşan görevleri getir
+  Future<List<TaskModel>> getUpcomingTasks() async {
+    try {
+      final userService = UserService();
+      final currentUser = userService.currentUser;
+      if (currentUser == null) return [];
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final nextWeek = today.add(const Duration(days: 7));
+
+      final querySnapshot = await _firestore
+          .collection(_collection)
+          .where('assignedTo', isEqualTo: currentUser.id)
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => TaskModel.fromFirestore(doc))
+          .where((task) => 
+              task.deadline.isAfter(today) &&
+              task.deadline.isBefore(nextWeek))
+          .toList()
+        ..sort((a, b) => a.deadline.compareTo(b.deadline));
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Görev eklerini stream olarak getir
+  Stream<List<Map<String, dynamic>>> getTaskAttachmentsStream(String taskId) async* {
+    try {
+      final attachmentsSnapshot = await _firestore
+          .collection(_collection)
+          .doc(taskId)
+          .collection('attachments')
+          .orderBy('uploadedAt', descending: true)
+          .get();
+
+      final attachments = <Map<String, dynamic>>[];
+      
+      for (var doc in attachmentsSnapshot.docs) {
+        final data = doc.data();
+        final localPath = data['localPath'];
+        
+        if (localPath != null) {
+          final file = File(localPath);
+          if (await file.exists()) {
+            attachments.add({
+              'id': doc.id,
+              'name': data['name'] ?? path.basename(localPath),
+              'localPath': localPath,
+              'size': await file.length(),
+              'type': data['type'] ?? path.extension(localPath).replaceAll('.', ''),
+              'uploadedAt': data['uploadedAt'],
+            });
+          } else {
+            // Dosya yoksa sessizce atla
+            await doc.reference.delete();
+          }
+        }
+      }
+
+      yield attachments;
+      
+      // Stream'i canlı tutmak için Firestore'u dinle
+      final stream = _firestore
+          .collection(_collection)
+          .doc(taskId)
+          .collection('attachments')
+          .snapshots();
+          
+      await for (var snapshot in stream) {
+        final updatedAttachments = <Map<String, dynamic>>[];
+        
+        for (var doc in snapshot.docs) {
+          final data = doc.data();
+          final localPath = data['localPath'];
+          
+          if (localPath != null) {
+            final file = File(localPath);
+            if (await file.exists()) {
+              updatedAttachments.add({
+                'id': doc.id,
+                'name': data['name'] ?? path.basename(localPath),
+                'localPath': localPath,
+                'size': await file.length(),
+                'type': data['type'] ?? path.extension(localPath).replaceAll('.', ''),
+                'uploadedAt': data['uploadedAt'],
+              });
+            } else {
+              // Dosya yoksa sessizce atla
+              await doc.reference.delete();
+            }
+          }
+        }
+        
+        yield updatedAttachments;
+      }
+    } catch (e) {
+      print('Dosya listesi alma hatası: $e');
+      yield [];
+    }
+  }
+
+  // Görev yorumlarını stream olarak getir
+  Stream<List<CommentModel>> getTaskCommentsStream(String taskId) {
+    return _firestore
+        .collection(_collection)
+        .doc(taskId)
+        .collection('comments')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) {
+              final data = doc.data();
+              return CommentModel(
+                id: doc.id,
+                userId: data['userId'] ?? '',
+                content: data['content'] ?? '',
+                createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+              );
+            })
+            .toList());
+  }
+
+  // Göreve dosya yükle
+  Future<void> uploadTaskFile(String taskId, File file, String fileName) async {
+    try {
+      final localStorageService = LocalStorageService();
+      final localPath = await localStorageService.saveTaskFile(taskId, file, fileName);
+      
+      if (localPath == null || !await File(localPath).exists()) {
+        throw Exception('Dosya kaydedilemedi');
+      }
+
+      await _firestore
+          .collection(_collection)
+          .doc(taskId)
+          .collection('attachments')
+          .add({
+        'name': fileName,
+        'localPath': localPath,
+        'uploadedAt': FieldValue.serverTimestamp(),
+        'size': file.lengthSync(),
+        'type': fileName.split('.').last,
+      });
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Görev dosyasını sil
+  Future<void> deleteTaskFile(String taskId, String filePath) async {
+    try {
+      final localStorageService = LocalStorageService();
+      await localStorageService.deleteTaskFile(taskId, filePath);
+
+      final attachmentsSnapshot = await _firestore
+          .collection(_collection)
+          .doc(taskId)
+          .collection('attachments')
+          .where('localPath', isEqualTo: filePath)
+          .get();
+
+      for (var doc in attachmentsSnapshot.docs) {
+        await doc.reference.delete();
+      }
+    } catch (e) {
+      print('Dosya silme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Göreve yorum ekle
+  Future<void> addTaskComment(String taskId, String comment) async {
+    try {
+      final currentUser = _userService.currentUser;
+      if (currentUser == null) {
+        throw Exception('Kullanıcı bilgisi bulunamadı');
+      }
+
+      await _firestore
+          .collection(_collection)
+          .doc(taskId)
+          .collection('comments')
+          .add({
+        'content': comment,
+        'userId': currentUser.id,
+        'userName': currentUser.name,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Dosyayı getir
+  Future<File?> getTaskFile(String filePath) async {
+    try {
+      final localStorageService = LocalStorageService();
+      return await localStorageService.getTaskFile(filePath);
+    } catch (e) {
+      print('Dosya getirme hatası: $e');
+      return null;
+    }
+  }
+
+  // Dosya var mı kontrol et
+  Future<bool> doesFileExist(String filePath) async {
+    try {
+      final localStorageService = LocalStorageService();
+      return await localStorageService.doesFileExist(filePath);
+    } catch (e) {
+      print('Dosya kontrol hatası: $e');
+      return false;
+    }
+  }
+
+  // Dosya bilgilerini getir
+  Future<Map<String, dynamic>?> getTaskFileInfo(String taskId, String filePath) async {
+    try {
+      final attachmentsSnapshot = await _firestore
+          .collection(_collection)
+          .doc(taskId)
+          .collection('attachments')
+          .where('localPath', isEqualTo: filePath)
+          .get();
+
+      if (attachmentsSnapshot.docs.isEmpty) {
+        return null;
+      }
+
+      final data = attachmentsSnapshot.docs.first.data();
+      final file = File(filePath);
+      
+      if (await file.exists()) {
+        final fileSize = await file.length();
+        return {
+          'name': data['name'] ?? path.basename(filePath),
+          'size': fileSize,
+          'type': data['type'] ?? path.extension(filePath).replaceAll('.', ''),
+          'localPath': filePath,
+          'uploadedAt': data['uploadedAt'],
+        };
+      }
+      
+      return null;
+    } catch (e) {
+      print('Dosya bilgisi getirme hatası: $e');
       return null;
     }
   }

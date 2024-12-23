@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
+import '../services/user_service.dart';
 
 class UserSearchDelegate extends SearchDelegate<UserModel?> {
   final List<UserModel> users;
   final String currentUserId;
+  final UserService userService;
 
   UserSearchDelegate({
     required this.users,
     required this.currentUserId,
+    required this.userService,
   });
 
   @override

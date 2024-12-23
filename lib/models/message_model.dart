@@ -135,6 +135,10 @@ class MessageModel {
     };
   }
 
+  Map<String, dynamic> toFirestore() {
+    return toMap();
+  }
+
   MessageModel copyWith({
     String? id,
     String? chatId,

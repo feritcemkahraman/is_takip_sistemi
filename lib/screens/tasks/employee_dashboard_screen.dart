@@ -191,7 +191,7 @@ class EmployeeDashboardScreen extends StatelessWidget {
                               context,
                               MaterialPageRoute(
                                 builder: (context) => TaskDetailScreen(
-                                  task: task,
+                                  taskId: task.id,
                                   canInteract: true,
                                 ),
                               ),

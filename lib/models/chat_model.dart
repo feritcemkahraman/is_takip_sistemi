@@ -32,13 +32,24 @@ class ChatModel {
 
   factory ChatModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    
+    // Timestamp dönüşümlerini güvenli hale getir
+    DateTime getDateTime(dynamic value) {
+      if (value is Timestamp) {
+        return value.toDate();
+      } else if (value is DateTime) {
+        return value;
+      }
+      return DateTime.now(); // Varsayılan değer
+    }
+
     return ChatModel(
       id: doc.id,
       name: data['name'] as String,
       participants: List<String>.from(data['participants'] as List),
       createdBy: data['createdBy'] as String,
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
-      updatedAt: (data['updatedAt'] as Timestamp).toDate(),
+      createdAt: getDateTime(data['createdAt']),
+      updatedAt: getDateTime(data['updatedAt']),
       isGroup: data['isGroup'] as bool? ?? false,
       mutedBy: List<String>.from(data['mutedBy'] as List? ?? []),
       messages: (data['messages'] as List<dynamic>? ?? [])
@@ -57,6 +68,7 @@ class ChatModel {
 
   Map<String, dynamic> toMap() {
     return {
+      'id': id,
       'name': name,
       'participants': participants,
       'createdBy': createdBy,
@@ -77,11 +89,14 @@ class ChatModel {
       'name': name,
       'participants': participants,
       'createdBy': createdBy,
-      'createdAt': createdAt,
-      'updatedAt': updatedAt,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
       'isGroup': isGroup,
       'mutedBy': mutedBy,
       'messages': messages.map((m) => m.toMap()).toList(),
+      'lastMessage': lastMessage?.toMap(),
+      'unreadCount': unreadCount,
+      'avatar': avatar,
     };
   }
 

@@ -3,76 +3,181 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 
 class LocalStorageService {
-  Future<Directory> get _appDir async {
+  // Görev dosyaları için ana dizini al
+  Future<String> get _taskFilesDir async {
     final appDir = await getApplicationDocumentsDirectory();
-    final mediaDir = Directory('${appDir.path}/media');
+    final taskFilesDir = Directory(path.join(appDir.path, 'task_files'));
+    if (!await taskFilesDir.exists()) {
+      await taskFilesDir.create(recursive: true);
+    }
+    return taskFilesDir.path;
+  }
+
+  // Medya dosyaları için ana dizini al
+  Future<String> get _mediaDir async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final mediaDir = Directory(path.join(appDir.path, 'media'));
     if (!await mediaDir.exists()) {
       await mediaDir.create(recursive: true);
     }
-    return mediaDir;
+    return mediaDir.path;
   }
 
-  Future<Directory> get _taskAttachmentsDir async {
-    final dir = await _appDir;
-    final taskDir = Directory('${dir.path}/tasks');
+  // Görev için dosya dizinini al
+  Future<String> _getTaskDir(String taskId) async {
+    final baseDir = await _taskFilesDir;
+    final taskDir = Directory(path.join(baseDir, taskId));
     if (!await taskDir.exists()) {
       await taskDir.create(recursive: true);
     }
-    return taskDir;
+    return taskDir.path;
   }
 
-  Future<File> saveFile(File file, String fileName) async {
-    final dir = await _appDir;
-    final extension = path.extension(file.path);
-    final newPath = path.join(dir.path, '$fileName$extension');
-    return await file.copy(newPath);
+  // Genel dosya kaydetme metodu
+  Future<String> saveFile(File file, String fileName) async {
+    try {
+      final mediaDir = await _mediaDir;
+      final safeFileName = DateTime.now().millisecondsSinceEpoch.toString() + '_' + 
+          fileName.replaceAll(RegExp(r'[^a-zA-Z0-9.]'), '_');
+      final targetPath = path.join(mediaDir, safeFileName);
+      
+      // Dosyayı kopyala
+      await file.copy(targetPath);
+      
+      return targetPath;
+    } catch (e) {
+      print('Dosya kaydetme hatası: $e');
+      rethrow;
+    }
   }
 
+  // Görev eki kaydetme metodu
   Future<String> saveTaskAttachment(String taskId, String fileName, File file) async {
-    final dir = await _taskAttachmentsDir;
-    final taskDir = Directory('${dir.path}/$taskId');
-    if (!await taskDir.exists()) {
-      await taskDir.create(recursive: true);
+    try {
+      final taskDir = await _getTaskDir(taskId);
+      final safeFileName = DateTime.now().millisecondsSinceEpoch.toString() + '_' + 
+          fileName.replaceAll(RegExp(r'[^a-zA-Z0-9.]'), '_');
+      final targetPath = path.join(taskDir, safeFileName);
+      
+      // Dosyayı kopyala
+      await file.copy(targetPath);
+      
+      return targetPath;
+    } catch (e) {
+      print('Görev eki kaydetme hatası: $e');
+      rethrow;
     }
-    final extension = path.extension(file.path);
-    final newPath = path.join(taskDir.path, '$fileName$extension');
-    final savedFile = await file.copy(newPath);
-    return savedFile.path;
   }
 
-  Future<File?> getTaskAttachment(String filePath) async {
-    final file = File(filePath);
-    if (await file.exists()) {
-      return file;
+  // Dosyayı kaydet
+  Future<String> saveTaskFile(String taskId, File file, String fileName) async {
+    try {
+      final taskDir = await _getTaskDir(taskId);
+      
+      // Dosya adını güvenli hale getir
+      final extension = path.extension(fileName);
+      final baseName = path.basenameWithoutExtension(fileName)
+          .replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+      final safeFileName = '${DateTime.now().millisecondsSinceEpoch}_$baseName$extension';
+      
+      final targetPath = path.join(taskDir, safeFileName);
+      
+      // Dosyayı kopyala
+      await file.copy(targetPath);
+      
+      return targetPath;
+    } catch (e) {
+      print('Dosya kaydetme hatası: $e');
+      rethrow;
     }
-    return null;
   }
 
+  // Dosyayı sil
+  Future<void> deleteTaskFile(String taskId, String filePath) async {
+    try {
+      final file = File(filePath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      print('Dosya silme hatası: $e');
+      rethrow;
+    }
+  }
+
+  // Görev dosyalarını getir
+  Future<List<String>> getTaskAttachments(String taskId) async {
+    try {
+      final taskDir = await _getTaskDir(taskId);
+      final directory = Directory(taskDir);
+      
+      if (!await directory.exists()) {
+        return [];
+      }
+
+      final files = await directory
+          .list()
+          .where((entity) => entity is File)
+          .map((entity) => entity.path)
+          .toList();
+
+      return files;
+    } catch (e) {
+      print('Dosya listesi alma hatası: $e');
+      return [];
+    }
+  }
+
+  // Tüm görev dosyalarını sil
   Future<void> deleteTaskAttachments(String taskId) async {
-    final dir = await _taskAttachmentsDir;
-    final taskDir = Directory('${dir.path}/$taskId');
-    if (await taskDir.exists()) {
-      await taskDir.delete(recursive: true);
+    try {
+      final taskDir = await _getTaskDir(taskId);
+      final directory = Directory(taskDir);
+      
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+    } catch (e) {
+      print('Görev dosyaları silme hatası: $e');
+      rethrow;
     }
   }
 
-  Future<void> deleteFile(String filePath) async {
-    final file = File(filePath);
-    if (await file.exists()) {
-      await file.delete();
+  // Dosya boyutunu formatla
+  String getFileSizeString(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    } else if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    } else if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    } else {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
     }
   }
 
-  Future<List<File>> getAllFiles() async {
-    final dir = await _appDir;
-    final files = await dir.list().toList();
-    return files.whereType<File>().toList();
+  // Dosyayı oku
+  Future<File?> getTaskFile(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (await file.exists()) {
+        return file;
+      }
+      return null;
+    } catch (e) {
+      print('Dosya okuma hatası: $e');
+      return null;
+    }
   }
 
-  Future<void> clearCache() async {
-    final dir = await _appDir;
-    if (await dir.exists()) {
-      await dir.delete(recursive: true);
+  // Dosya var mı kontrol et
+  Future<bool> doesFileExist(String filePath) async {
+    try {
+      final file = File(filePath);
+      return await file.exists();
+    } catch (e) {
+      print('Dosya kontrol hatası: $e');
+      return false;
     }
   }
 }

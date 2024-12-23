@@ -5,14 +5,16 @@ import '../services/user_service.dart';
 
 class MessageBubble extends StatelessWidget {
   final MessageModel message;
+  final bool isMe;
 
-  const MessageBubble({Key? key, required this.message}) : super(key: key);
+  const MessageBubble({
+    Key? key, 
+    required this.message,
+    required this.isMe,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final currentUser = context.read<UserService>().currentUser;
-    final isMe = currentUser?.id == message.senderId;
-
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -25,9 +27,8 @@ class MessageBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (message.attachments.isNotEmpty) ...[
-              for (var attachment in message.attachments)
-                _buildAttachmentPreview(attachment),
+            if (message.type != MessageModel.typeText) ...[
+              _buildAttachmentPreview(message),
               const SizedBox(height: 8),
             ],
             Text(
@@ -48,26 +49,29 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildAttachmentPreview(MessageAttachment attachment) {
-    switch (attachment.type) {
+  Widget _buildAttachmentPreview(MessageModel message) {
+    if (message.attachmentUrl == null) return const SizedBox();
+
+    switch (message.type) {
       case MessageModel.typeImage:
         return ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: Image.network(
-            attachment.url,
+            message.attachmentUrl!,
             width: 200,
             height: 200,
             fit: BoxFit.cover,
           ),
         );
-      default:
+      case MessageModel.typeFile:
         return ListTile(
           leading: const Icon(Icons.attach_file),
-          title: Text(attachment.name),
-          subtitle: Text(attachment.formattedSize),
+          title: Text(message.content),
           contentPadding: EdgeInsets.zero,
           dense: true,
         );
+      default:
+        return const SizedBox();
     }
   }
 

@@ -27,7 +27,10 @@ class DefaultFirebaseOptions {
       case TargetPlatform.macOS:
         return macos;
       case TargetPlatform.windows:
-        return windows;
+        throw UnsupportedError(
+          'DefaultFirebaseOptions have not been configured for windows - '
+          'you can reconfigure this by running the FlutterFire CLI again.',
+        );
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -41,49 +44,40 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBBLlWPPnFxuJfxpb0j9XHwPjmQgTvYs8Q',
-    appId: '1:795393167329:web:0485b04c707e0c00ca4ca0',
-    messagingSenderId: '795393167329',
-    projectId: 'is-takip-sistemi-69ca5',
-    authDomain: 'is-takip-sistemi-69ca5.firebaseapp.com',
-    storageBucket: 'is-takip-sistemi-69ca5.firebasestorage.app',
-    measurementId: 'G-WD0QL34Z9M',
+    apiKey: 'YOUR-WEB-API-KEY',
+    appId: 'YOUR-WEB-APP-ID',
+    messagingSenderId: 'YOUR-SENDER-ID',
+    projectId: 'YOUR-PROJECT-ID',
+    authDomain: 'YOUR-AUTH-DOMAIN',
+    storageBucket: 'YOUR-STORAGE-BUCKET',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDiaALmm-KD5LTzoZcwZimM3b3SJ5KeEx8',
-    appId: '1:795393167329:android:d1eacfa19e3d38d8ca4ca0',
-    messagingSenderId: '795393167329',
-    projectId: 'is-takip-sistemi-69ca5',
-    storageBucket: 'is-takip-sistemi-69ca5.firebasestorage.app',
+    apiKey: 'YOUR-ANDROID-API-KEY',
+    appId: 'YOUR-ANDROID-APP-ID',
+    messagingSenderId: 'YOUR-SENDER-ID',
+    projectId: 'YOUR-PROJECT-ID',
+    storageBucket: 'YOUR-STORAGE-BUCKET',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAjsuyzI6n17s8n3p-hGD6e1Q7kW0q3DQM',
-    appId: '1:795393167329:ios:28cef0e6760a89d4ca4ca0',
-    messagingSenderId: '795393167329',
-    projectId: 'is-takip-sistemi-69ca5',
-    storageBucket: 'is-takip-sistemi-69ca5.firebasestorage.app',
-    iosBundleId: 'com.example.isTakipSistemi',
+    apiKey: 'YOUR-IOS-API-KEY',
+    appId: 'YOUR-IOS-APP-ID',
+    messagingSenderId: 'YOUR-SENDER-ID',
+    projectId: 'YOUR-PROJECT-ID',
+    storageBucket: 'YOUR-STORAGE-BUCKET',
+    iosClientId: 'YOUR-IOS-CLIENT-ID',
+    iosBundleId: 'YOUR-IOS-BUNDLE-ID',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyAjsuyzI6n17s8n3p-hGD6e1Q7kW0q3DQM',
-    appId: '1:795393167329:ios:28cef0e6760a89d4ca4ca0',
-    messagingSenderId: '795393167329',
-    projectId: 'is-takip-sistemi-69ca5',
-    storageBucket: 'is-takip-sistemi-69ca5.firebasestorage.app',
-    iosBundleId: 'com.example.isTakipSistemi',
-  );
-
-  static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyBBLlWPPnFxuJfxpb0j9XHwPjmQgTvYs8Q',
-    appId: '1:795393167329:web:f64e475aba934a3eca4ca0',
-    messagingSenderId: '795393167329',
-    projectId: 'is-takip-sistemi-69ca5',
-    authDomain: 'is-takip-sistemi-69ca5.firebaseapp.com',
-    storageBucket: 'is-takip-sistemi-69ca5.firebasestorage.app',
-    measurementId: 'G-ECC2MRJHG4',
+    apiKey: 'YOUR-MACOS-API-KEY',
+    appId: 'YOUR-MACOS-APP-ID',
+    messagingSenderId: 'YOUR-SENDER-ID',
+    projectId: 'YOUR-PROJECT-ID',
+    storageBucket: 'YOUR-STORAGE-BUCKET',
+    iosClientId: 'YOUR-MACOS-CLIENT-ID',
+    iosBundleId: 'YOUR-MACOS-BUNDLE-ID',
   );
 
 }

@@ -109,31 +109,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final file = File(result.files.first.path!);
     final fileName = result.files.first.name;
 
-    final savedFile = await _storageService.saveFile(file, fileName);
-
-    await _chatService.sendMessage(
-      chatId: widget.chat.id,
-      content: fileName,
-      type: MessageModel.typeFile,
-      attachments: [
-        MessageAttachment(
-          id: DateTime.now().toString(),
-          name: fileName,
-          url: savedFile.path,
-          type: MessageModel.typeFile,
-          size: await savedFile.length(),
-          createdAt: DateTime.now(),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _sendFile(File file, String type) async {
     setState(() => _isLoading = true);
 
     try {
       if (widget.isNewChat && _createdChat == null) {
-        // Yeni sohbet oluştur
         _createdChat = await _chatService.createChat(
           name: widget.chat.name,
           participants: widget.chat.participants.where((id) => 
@@ -143,12 +122,47 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
 
-      // Dosyayı kaydet ve mesaj gönder
-      final savedFile = await _storageService.saveFile(file);
+      final savedFile = await _storageService.saveFile(file, fileName);
+
+      await _chatService.sendMessage(
+        chatId: _createdChat?.id ?? widget.chat.id,
+        content: fileName,
+        type: MessageModel.typeFile,
+        attachmentUrl: savedFile,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Dosya gönderilemedi: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _sendFile(File file, String type) async {
+    setState(() => _isLoading = true);
+
+    try {
+      if (widget.isNewChat && _createdChat == null) {
+        _createdChat = await _chatService.createChat(
+          name: widget.chat.name,
+          participants: widget.chat.participants.where((id) => 
+            id != _userService.currentUser?.id
+          ).toList(),
+          isGroup: widget.chat.isGroup,
+        );
+      }
+
+      final savedFile = await _storageService.saveFile(file, file.path.split('/').last);
       await _chatService.sendMessage(
         chatId: _createdChat?.id ?? widget.chat.id,
         content: type == 'image' ? '📷 Fotoğraf' : '📎 Dosya',
-        attachment: savedFile.path,
+        type: type,
+        attachmentUrl: savedFile,
       );
     } catch (e) {
       if (mounted) {
@@ -186,7 +200,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 MaterialPageRoute(
                   builder: (context) => ChatMediaScreen(
                     chat: widget.chat,
-                    currentUserId: currentUser.id,
                   ),
                 ),
               );
@@ -223,7 +236,6 @@ class _ChatScreenState extends State<ChatScreen> {
                       MaterialPageRoute(
                         builder: (context) => ChatMediaScreen(
                           chat: widget.chat,
-                          currentUserId: currentUser.id,
                         ),
                       ),
                     );
@@ -320,9 +332,6 @@ class _ChatScreenState extends State<ChatScreen> {
                               return MessageBubble(
                                 message: message,
                                 isMe: isMe,
-                                chat: widget.chat,
-                                senderName: senderSnapshot.data?.name,
-                                onLongPress: isMe ? () => _showDeleteDialog(message) : null,
                               );
                             },
                           );

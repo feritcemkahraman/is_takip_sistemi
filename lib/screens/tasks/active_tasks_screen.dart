@@ -7,20 +7,37 @@ import '../../services/user_service.dart';
 import '../../services/auth_service.dart';
 import 'task_detail_screen.dart';
 
-class ActiveTasksScreen extends StatelessWidget {
-  const ActiveTasksScreen({Key? key}) : super(key: key);
+class ActiveTasksScreen extends StatefulWidget {
+  final Map<String, dynamic>? arguments;
+  
+  const ActiveTasksScreen({
+    Key? key,
+    this.arguments,
+  }) : super(key: key);
+
+  @override
+  State<ActiveTasksScreen> createState() => _ActiveTasksScreenState();
+}
+
+class _ActiveTasksScreenState extends State<ActiveTasksScreen> {
+  late TaskService _taskService;
+
+  @override
+  void initState() {
+    super.initState();
+    final userService = Provider.of<UserService>(context, listen: false);
+    _taskService = TaskService(userService);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final taskService = Provider.of<TaskService>(context);
     final userService = Provider.of<UserService>(context);
     final currentUser = userService.currentUser;
     
     // Route argümanlarını al
-    final arguments = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    final filterByUser = arguments?['filterByUser'] as bool?;
-    final filterByDate = arguments?['filterByDate'] as String?;
-    final filterByStatus = arguments?['filterByStatus'] as String?;
+    final filterByUser = widget.arguments?['filterByUser'] as bool?;
+    final filterByDate = widget.arguments?['filterByDate'] as String?;
+    final filterByStatus = widget.arguments?['filterByStatus'] as String?;
 
     // Başlık metnini belirle
     String title = 'Devam Eden Görevler';
@@ -32,40 +49,65 @@ class ActiveTasksScreen extends StatelessWidget {
       title = 'Görevlerim';
     }
 
+    if (currentUser == null) {
+      print('Current user is null in active tasks screen');
+      return const Scaffold(
+        body: Center(
+          child: Text('Kullanıcı oturumu bulunamadı'),
+        ),
+      );
+    }
+
+    print('Building active tasks screen for user: ${currentUser.id}');
+    print('User Role: ${currentUser.role}');
+    print('User Name: ${currentUser.name}');
+
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
       ),
-      body: FutureBuilder<List<TaskModel>>(
-        future: taskService.getActiveTasks(),
+      body: StreamBuilder<List<TaskModel>>(
+        stream: _taskService.getActiveTasksStream(),
         builder: (context, snapshot) {
+          print('Active tasks stream builder update');
+          
           if (snapshot.connectionState == ConnectionState.waiting) {
+            print('Active tasks stream is waiting');
             return const Center(child: CircularProgressIndicator());
           }
 
           if (snapshot.hasError) {
+            print('Active tasks stream error: ${snapshot.error}');
             return Center(child: Text('Hata: ${snapshot.error}'));
           }
 
           var tasks = snapshot.data ?? [];
+          print('Active tasks count: ${tasks.length}');
 
           // Filtreleri uygula
-          if (filterByUser == true && currentUser != null) {
-            tasks = tasks.where((task) => task.assignedTo == currentUser.id).toList();
+          if (filterByUser == true) {
+            final userId = widget.arguments?['userId'] as String?;
+            if (userId != null) {
+              tasks = tasks.where((task) => task.assignedTo == userId).toList();
+              print('Filtered tasks by user: ${tasks.length}');
+            }
           }
 
           if (filterByDate == 'today') {
             final now = DateTime.now();
-            tasks = tasks.where((task) {
-              return task.deadline.year == now.year &&
-                     task.deadline.month == now.month &&
-                     task.deadline.day == now.day;
-            }).toList();
+            final today = DateTime(now.year, now.month, now.day);
+            final tomorrow = today.add(const Duration(days: 1));
+            tasks = tasks.where((task) =>
+                task.deadline.isAfter(today) &&
+                task.deadline.isBefore(tomorrow)).toList();
+            print('Filtered tasks by today: ${tasks.length}');
           }
 
           if (filterByStatus == 'overdue') {
             final now = DateTime.now();
-            tasks = tasks.where((task) => task.deadline.isBefore(now)).toList();
+            final today = DateTime(now.year, now.month, now.day);
+            tasks = tasks.where((task) => task.deadline.isBefore(today)).toList();
+            print('Filtered tasks by overdue: ${tasks.length}');
           }
 
           if (tasks.isEmpty) {
@@ -111,15 +153,12 @@ class ActiveTasksScreen extends StatelessWidget {
                 child: ListTile(
                   leading: CircleAvatar(
                     backgroundColor: _getPriorityColor(task.priority),
-                    child: StreamBuilder<int>(
-                      stream: taskService.getUserActiveTaskCountStream(currentUser?.id ?? ''),
-                      builder: (context, snapshot) {
-                        final count = snapshot.data ?? 0;
-                        return Text(
-                          '$count',
-                          style: const TextStyle(color: Colors.white),
-                        );
-                      },
+                    child: Text(
+                      '${daysLeft.abs()}g',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                   title: Text(
@@ -128,42 +167,28 @@ class ActiveTasksScreen extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  subtitle: FutureBuilder<UserModel?>(
-                    future: userService.getUserById(task.assignedTo),
-                    builder: (context, userSnapshot) {
-                      final user = userSnapshot.data;
-                      return Text(
-                        'Atanan: ${user?.name ?? 'Yükleniyor...'}\n'
-                        'Bitiş: ${task.deadline.toString().split(' ')[0]}\n'
-                        'Kalan: ${isOverdue ? '${-daysLeft} gün gecikme' : '$daysLeft gün'}\n'
-                        'Açıklama: ${task.description}',
-                        style: TextStyle(
-                          color: isOverdue ? Colors.red : null,
-                        ),
-                      );
-                    },
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (isOverdue)
-                        const Icon(Icons.warning, color: Colors.red),
-                      IconButton(
-                        icon: const Icon(Icons.arrow_forward_ios),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => TaskDetailScreen(
-                                task: task,
-                                canInteract: true,
-                              ),
-                            ),
-                          );
-                        },
+                      const SizedBox(height: 4),
+                      Text(task.description),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Teslim Tarihi: ${task.deadline.day}/${task.deadline.month}/${task.deadline.year}',
+                        style: TextStyle(
+                          color: isOverdue ? Colors.red : Colors.grey[600],
+                        ),
                       ),
                     ],
                   ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => TaskDetailScreen(taskId: task.id),
+                      ),
+                    );
+                  },
                 ),
               );
             },
