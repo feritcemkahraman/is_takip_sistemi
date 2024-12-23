@@ -5,8 +5,9 @@ import '../services/chat_service.dart';
 import '../services/user_service.dart';
 import '../models/chat_model.dart';
 import '../models/user_model.dart';
-import 'chat_screen.dart';
 import '../widgets/user_search_delegate.dart';
+import '../widgets/chat_list_item.dart';
+import 'chat_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -190,39 +191,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(
-                chat.mutedBy.contains(context.read<UserService>().currentUser?.id)
-                    ? Icons.notifications_active
-                    : Icons.notifications_off,
-                color: Theme.of(context).primaryColor,
-              ),
-              title: Text(
-                chat.mutedBy.contains(context.read<UserService>().currentUser?.id)
-                    ? 'Bildirimleri Aç'
-                    : 'Sessize Al',
-              ),
-              onTap: () async {
-                Navigator.pop(context);
-                try {
-                  if (chat.mutedBy.contains(context.read<UserService>().currentUser?.id)) {
-                    await context.read<ChatService>().unmuteChatNotifications(chat.id);
-                  } else {
-                    await context.read<ChatService>().muteChatNotifications(chat.id);
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Hata: $e')),
-                    );
-                  }
-                }
-              },
-            ),
-            ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
               title: const Text('Sohbeti Sil', style: TextStyle(color: Colors.red)),
               onTap: () async {
                 Navigator.pop(context);
+                
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
@@ -242,30 +215,24 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   ),
                 );
 
-                if (confirm == true && mounted) {
+                if (confirm == true && context.mounted) {
                   try {
-                    setState(() => _isLoading = true);
                     await context.read<ChatService>().deleteChat(chat.id);
-                    if (mounted) {
+                    if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Sohbet silindi')),
                       );
                     }
                   } catch (e) {
-                    if (mounted) {
+                    if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('Hata: $e')),
                       );
-                    }
-                  } finally {
-                    if (mounted) {
-                      setState(() => _isLoading = false);
                     }
                   }
                 }
               },
             ),
-            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -388,6 +355,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
     final currentUser = context.watch<UserService>().currentUser;
     if (currentUser == null) return const Scaffold();
 
+    final isAdmin = currentUser.role == 'admin';
+
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
@@ -407,205 +376,81 @@ class _ChatListScreenState extends State<ChatListScreen> {
         stream: context.read<ChatService>().getUserChats(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(
-              child: Text('Hata: ${snapshot.error}'),
-            );
+            return Center(child: Text('Hata: ${snapshot.error}'));
           }
 
           if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
+            return const Center(child: CircularProgressIndicator());
           }
 
           final chats = snapshot.data!;
 
           if (chats.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.chat_bubble_outline,
-                    size: 64,
-                    color: Colors.grey[400],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Henüz sohbet yok',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ElevatedButton.icon(
-                    onPressed: () => _showNewChatDialog(context),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Yeni Sohbet'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            return const Center(
+              child: Text('Henüz sohbet bulunmuyor'),
             );
           }
 
           return ListView.builder(
             itemCount: chats.length,
-            padding: const EdgeInsets.symmetric(vertical: 8),
             itemBuilder: (context, index) {
               final chat = chats[index];
-              final otherParticipants = chat.participants
-                  .where((id) => id != currentUser.id)
-                  .toList();
-
-              return Card(
-                margin: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  leading: CircleAvatar(
-                    radius: 28,
-                    backgroundColor: Theme.of(context).primaryColor,
-                    backgroundImage: chat.avatar != null
-                        ? NetworkImage(chat.avatar!)
-                        : null,
-                    child: chat.avatar == null
-                        ? Text(
-                            chat.name[0].toUpperCase(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
-                        : null,
-                  ),
-                  title: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          chat.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+              return ChatListItem(
+                chat: chat,
+                currentUserId: currentUser.id,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChatScreen(
+                        chat: chat,
+                        isNewChat: false,
                       ),
-                      if (chat.lastMessage != null)
-                        Text(
-                          _formatTime(chat.lastMessage!.createdAt),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                    ],
-                  ),
-                  subtitle: chat.lastMessage != null
-                      ? Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                chat.lastMessage!.content,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ),
-                            if (chat.unreadCount > 0)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).primaryColor,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  chat.unreadCount.toString(),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        )
-                      : const Text('Yeni sohbet'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.more_vert),
-                    onPressed: () => _showChatOptions(context, chat),
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ChatScreen(chat: chat),
-                      ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               );
             },
           );
         },
       ),
-      floatingActionButton: SpeedDial(
-        icon: Icons.add,
-        activeIcon: Icons.close,
-        backgroundColor: Theme.of(context).primaryColor,
-        foregroundColor: Colors.white,
-        activeBackgroundColor: Colors.red,
-        activeForegroundColor: Colors.white,
-        buttonSize: const Size(56.0, 56.0),
-        visible: true,
-        closeManually: false,
-        curve: Curves.bounceIn,
-        overlayColor: Colors.black,
-        overlayOpacity: 0.5,
-        elevation: 8.0,
-        shape: const CircleBorder(),
-        children: [
-          SpeedDialChild(
-            child: const Icon(Icons.message),
-            backgroundColor: Colors.blue,
+      floatingActionButton: isAdmin 
+        ? SpeedDial(
+            icon: Icons.add,
+            activeIcon: Icons.close,
+            backgroundColor: Theme.of(context).primaryColor,
             foregroundColor: Colors.white,
-            label: 'Yeni Sohbet',
-            onTap: () => _showNewChatDialog(context),
+            activeBackgroundColor: Colors.red,
+            activeForegroundColor: Colors.white,
+            buttonSize: const Size(56.0, 56.0),
+            visible: true,
+            closeManually: false,
+            curve: Curves.bounceIn,
+            overlayColor: Colors.black,
+            overlayOpacity: 0.5,
+            elevation: 8.0,
+            shape: const CircleBorder(),
+            children: [
+              SpeedDialChild(
+                child: const Icon(Icons.chat),
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                label: 'Yeni Sohbet',
+                onTap: _showUserSearch,
+              ),
+              SpeedDialChild(
+                child: const Icon(Icons.group_add),
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                label: 'Yeni Grup Oluştur',
+                onTap: () => _showCreateGroupDialog(context),
+              ),
+            ],
+          )
+        : FloatingActionButton(
+            onPressed: _showUserSearch,
+            child: const Icon(Icons.chat),
           ),
-          SpeedDialChild(
-            child: const Icon(Icons.group_add),
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
-            label: 'Yeni Grup',
-            onTap: () => _showCreateGroupDialog(context),
-          ),
-        ],
-      ),
     );
   }
 
