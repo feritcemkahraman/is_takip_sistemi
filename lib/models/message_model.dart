@@ -104,20 +104,36 @@ class MessageModel {
   }
 
   factory MessageModel.fromMap(Map<String, dynamic> map, String chatId) {
-    return MessageModel(
-      id: map['id'] as String,
-      chatId: chatId,
-      senderId: map['senderId'] as String,
-      content: map['content'] as String,
-      type: map['type'] as String? ?? typeText,
-      attachmentUrl: map['attachmentUrl'] as String?,
-      createdAt: (map['createdAt'] as Timestamp).toDate(),
-      readBy: List<String>.from(map['readBy'] as List? ?? []),
-      attachments: (map['attachments'] as List<dynamic>? ?? [])
-          .map((attachment) => MessageAttachment.fromMap(attachment as Map<String, dynamic>))
-          .toList(),
-      isDeleted: map['isDeleted'] as bool? ?? false,
-    );
+    try {
+      return MessageModel(
+        id: map['id'] as String? ?? '',
+        chatId: chatId,
+        senderId: map['senderId'] as String? ?? '',
+        content: map['content'] as String? ?? '',
+        type: map['type'] as String? ?? typeText,
+        attachmentUrl: map['attachmentUrl'] as String?,
+        createdAt: map['createdAt'] is Timestamp 
+            ? (map['createdAt'] as Timestamp).toDate()
+            : DateTime.now(),
+        readBy: List<String>.from(map['readBy'] as List? ?? []),
+        attachments: (map['attachments'] as List<dynamic>? ?? [])
+            .map((attachment) => MessageAttachment.fromMap(attachment as Map<String, dynamic>))
+            .toList(),
+        isDeleted: map['isDeleted'] as bool? ?? false,
+      );
+    } catch (e) {
+      print('Error in MessageModel.fromMap: $e');
+      print('Raw map data: $map');
+      // Varsayılan bir mesaj döndür
+      return MessageModel(
+        id: '',
+        chatId: chatId,
+        senderId: '',
+        content: 'Hatalı mesaj',
+        createdAt: DateTime.now(),
+        readBy: [],
+      );
+    }
   }
 
   Map<String, dynamic> toMap() {

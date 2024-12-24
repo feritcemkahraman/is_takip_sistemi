@@ -159,8 +159,21 @@ class ChatService extends ChangeNotifier {
     batch.set(messageRef, message.toFirestore());
 
     // Chat belgesini güncelle
+    final lastMessageMap = {
+      'id': message.id,
+      'chatId': chatId,
+      'senderId': message.senderId,
+      'content': message.content,
+      'type': message.type,
+      'attachmentUrl': message.attachmentUrl,
+      'createdAt': Timestamp.fromDate(message.createdAt),
+      'readBy': message.readBy,
+      'attachments': message.attachments.map((a) => a.toMap()).toList(),
+      'isDeleted': message.isDeleted,
+    };
+
     batch.update(_firestore.collection(_collection).doc(chatId), {
-      'lastMessage': message.toFirestore(),
+      'lastMessage': lastMessageMap,
       'updatedAt': Timestamp.fromDate(now),
       'unreadCount': FieldValue.increment(1),
     });

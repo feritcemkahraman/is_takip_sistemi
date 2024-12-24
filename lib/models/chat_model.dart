@@ -35,6 +35,13 @@ class ChatModel {
   factory ChatModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     
+    // Debug için veri tiplerini kontrol et
+    print('Chat ID: ${doc.id}');
+    print('lastMessage type: ${data['lastMessage']?.runtimeType}');
+    if (data['lastMessage'] != null) {
+      print('lastMessage content: ${data['lastMessage']}');
+    }
+    
     // Timestamp dönüşümlerini güvenli hale getir
     DateTime getDateTime(dynamic value) {
       if (value is Timestamp) {
@@ -45,28 +52,56 @@ class ChatModel {
       return DateTime.now(); // Varsayılan değer
     }
 
-    return ChatModel(
-      id: doc.id,
-      name: data['name'] as String,
-      participants: List<String>.from(data['participants'] as List),
-      createdBy: data['createdBy'] as String,
-      createdAt: getDateTime(data['createdAt']),
-      updatedAt: getDateTime(data['updatedAt']),
-      isGroup: data['isGroup'] as bool? ?? false,
-      mutedBy: List<String>.from(data['mutedBy'] as List? ?? []),
-      messages: (data['messages'] as List<dynamic>? ?? [])
-          .map((msg) => MessageModel.fromMap(msg as Map<String, dynamic>, doc.id))
-          .toList(),
-      lastMessage: data['lastMessage'] != null
-          ? MessageModel.fromMap(
-              data['lastMessage'] as Map<String, dynamic>,
-              doc.id,
-            )
-          : null,
-      unreadCount: data['unreadCount'] as int? ?? 0,
-      avatar: data['avatar'] as String?,
-      deletedBy: List<String>.from(data['deletedBy'] as List? ?? []),
-    );
+    try {
+      // lastMessage alanını güvenli bir şekilde dönüştür
+      MessageModel? lastMessage;
+      final lastMessageData = data['lastMessage'];
+      if (lastMessageData != null && lastMessageData is Map<String, dynamic>) {
+        try {
+          lastMessage = MessageModel.fromMap(lastMessageData, doc.id);
+        } catch (e) {
+          print('Error parsing lastMessage: $e');
+          lastMessage = null;
+        }
+      }
+
+      return ChatModel(
+        id: doc.id,
+        name: data['name'] as String? ?? '',
+        participants: List<String>.from(data['participants'] as List? ?? []),
+        createdBy: data['createdBy'] as String? ?? '',
+        createdAt: getDateTime(data['createdAt']),
+        updatedAt: getDateTime(data['updatedAt']),
+        isGroup: data['isGroup'] as bool? ?? false,
+        mutedBy: List<String>.from(data['mutedBy'] as List? ?? []),
+        messages: (data['messages'] as List<dynamic>? ?? [])
+            .map((msg) => MessageModel.fromMap(msg as Map<String, dynamic>, doc.id))
+            .toList(),
+        lastMessage: lastMessage,
+        unreadCount: (data['unreadCount'] is int) ? data['unreadCount'] as int : 0,
+        avatar: data['avatar'] as String?,
+        deletedBy: List<String>.from(data['deletedBy'] as List? ?? []),
+      );
+    } catch (e, stackTrace) {
+      print('Error in ChatModel.fromFirestore: $e');
+      print('Stack trace: $stackTrace');
+      print('Raw data: $data');
+      
+      // Hata durumunda varsayılan bir chat modeli döndür
+      return ChatModel(
+        id: doc.id,
+        name: '',
+        participants: [],
+        createdBy: '',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        isGroup: false,
+        mutedBy: [],
+        messages: [],
+        unreadCount: 0,
+        deletedBy: [],
+      );
+    }
   }
 
   Map<String, dynamic> toMap() {
