@@ -17,112 +17,71 @@ class ChatListItem extends StatelessWidget {
     required this.onTap,
   });
 
+  Future<void> _handleDelete(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sohbeti Sil'),
+        content: const Text('Bu sohbeti silmek istediğinizden emin misiniz?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && context.mounted) {
+      try {
+        await context.read<ChatService>().deleteChat(chat.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Sohbet silindi')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Hata: $e')),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final lastMessage = chat.lastMessage;
-    final unreadCount = chat.getUnreadCount(currentUserId);
-
     return ListTile(
       onTap: onTap,
       leading: CircleAvatar(
         backgroundColor: Theme.of(context).primaryColor,
         child: Text(
-          chat.name.isNotEmpty ? chat.name[0].toUpperCase() : '?',
+          chat.name.substring(0, 1).toUpperCase(),
           style: const TextStyle(color: Colors.white),
         ),
       ),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              chat.name,
-              style: TextStyle(
-                fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
-              ),
+      title: Text(
+        chat.name,
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+      subtitle: chat.lastMessage != null
+          ? Text(
+              _getLastMessagePreview(chat.lastMessage),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (lastMessage != null)
-            Text(
-              timeago.format(lastMessage.createdAt, locale: 'tr'),
-              style: TextStyle(
-                fontSize: 12,
-                color: unreadCount > 0 ? Colors.blue : Colors.grey,
-              ),
-            ),
-        ],
-      ),
-      subtitle: Row(
-        children: [
-          Expanded(
-            child: Text(
-              _getLastMessagePreview(lastMessage),
-              style: TextStyle(
-                color: unreadCount > 0 ? Colors.black87 : Colors.grey,
-                fontWeight: unreadCount > 0 ? FontWeight.w500 : FontWeight.normal,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (unreadCount > 0)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                unreadCount.toString(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-        ],
-      ),
+            )
+          : const Text('Henüz mesaj yok'),
       trailing: PopupMenuButton<String>(
         icon: const Icon(Icons.more_vert),
         onSelected: (value) async {
           if (value == 'delete') {
-            final confirm = await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Sohbeti Sil'),
-                content: const Text('Bu sohbeti silmek istediğinizden emin misiniz?'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('İptal'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    style: TextButton.styleFrom(foregroundColor: Colors.red),
-                    child: const Text('Sil'),
-                  ),
-                ],
-              ),
-            );
-
-            if (confirm == true && context.mounted) {
-              try {
-                await context.read<ChatService>().deleteChat(chat.id);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Sohbet silindi')),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Hata: $e')),
-                  );
-                }
-              }
-            }
+            await _handleDelete(context);
           } else if (value == 'mute') {
             try {
               if (chat.mutedBy.contains(currentUserId)) {

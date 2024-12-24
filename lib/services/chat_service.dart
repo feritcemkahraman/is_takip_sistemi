@@ -175,7 +175,7 @@ class ChatService extends ChangeNotifier {
     batch.update(_firestore.collection(_collection).doc(chatId), {
       'lastMessage': lastMessageMap,
       'updatedAt': Timestamp.fromDate(now),
-      'unreadCount': FieldValue.increment(1),
+      'unreadCount': FieldValue.increment(participants.length - 1),
     });
 
     // Batch'i commit et
