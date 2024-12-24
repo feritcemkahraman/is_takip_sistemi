@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/message_model.dart';
 import 'package:provider/provider.dart';
 import '../services/user_service.dart';
+import 'dart:io';
 
 class MessageBubble extends StatelessWidget {
   final MessageModel message;
@@ -56,11 +57,21 @@ class MessageBubble extends StatelessWidget {
       case MessageModel.typeImage:
         return ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            message.attachmentUrl!,
+          child: Image.file(
+            File(message.attachmentUrl!),
             width: 200,
             height: 200,
             fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                width: 200,
+                height: 200,
+                color: Colors.grey[300],
+                child: const Center(
+                  child: Icon(Icons.error),
+                ),
+              );
+            },
           ),
         );
       case MessageModel.typeFile:
@@ -69,6 +80,17 @@ class MessageBubble extends StatelessWidget {
           title: Text(message.content),
           contentPadding: EdgeInsets.zero,
           dense: true,
+          onTap: () async {
+            try {
+              final file = File(message.attachmentUrl!);
+              if (await file.exists()) {
+                // Dosyayı aç
+                // TODO: Implement file opening
+              }
+            } catch (e) {
+              print('Dosya açma hatası: $e');
+            }
+          },
         );
       default:
         return const SizedBox();

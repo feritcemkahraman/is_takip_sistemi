@@ -13,6 +13,7 @@ import 'chat_media_screen.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/emoji_picker_widget.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/storage_service.dart';
 
 class ChatScreen extends StatefulWidget {
   final ChatModel chat;
@@ -159,20 +160,19 @@ class _ChatScreenState extends State<ChatScreen> {
       if (widget.isNewChat && _createdChat == null) {
         _createdChat = await _chatService.createChat(
           name: widget.chat.name,
-          participants: widget.chat.participants.where((id) => 
-            id != _userService.currentUser?.id
-          ).toList(),
+          participants: widget.chat.participants,
           isGroup: widget.chat.isGroup,
         );
       }
 
-      final savedFile = await _storageService.saveFile(file, fileName);
+      final chatId = _createdChat?.id ?? widget.chat.id;
+      final savedFilePath = await _storageService.saveFile(file, fileName);
 
       await _chatService.sendMessage(
-        chatId: _createdChat?.id ?? widget.chat.id,
+        chatId: chatId,
         content: fileName,
         type: MessageModel.typeFile,
-        attachmentUrl: savedFile,
+        attachmentUrl: savedFilePath,
       );
     } catch (e) {
       if (mounted) {
@@ -194,19 +194,20 @@ class _ChatScreenState extends State<ChatScreen> {
       if (widget.isNewChat && _createdChat == null) {
         _createdChat = await _chatService.createChat(
           name: widget.chat.name,
-          participants: widget.chat.participants.where((id) => 
-            id != _userService.currentUser?.id
-          ).toList(),
+          participants: widget.chat.participants,
           isGroup: widget.chat.isGroup,
         );
       }
 
-      final savedFile = await _storageService.saveFile(file, file.path.split('/').last);
+      final chatId = _createdChat?.id ?? widget.chat.id;
+      final fileName = file.path.split('/').last;
+      final savedFilePath = await _storageService.saveFile(file, fileName);
+
       await _chatService.sendMessage(
-        chatId: _createdChat?.id ?? widget.chat.id,
-        content: type == 'image' ? '📷 Fotoğraf' : '📎 Dosya',
-        type: type,
-        attachmentUrl: savedFile,
+        chatId: chatId,
+        content: type == 'image' ? 'Fotoğraf' : fileName,
+        type: type == 'image' ? MessageModel.typeImage : MessageModel.typeFile,
+        attachmentUrl: savedFilePath,
       );
     } catch (e) {
       if (mounted) {

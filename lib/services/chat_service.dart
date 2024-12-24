@@ -148,7 +148,7 @@ class ChatService extends ChangeNotifier {
       id: messageRef.id,
       chatId: chatId,
       senderId: currentUser.id,
-      content: content,
+      content: type == MessageModel.typeImage ? 'Fotoğraf' : content,
       createdAt: now,
       readBy: [currentUser.id],
       type: type,
@@ -158,14 +158,11 @@ class ChatService extends ChangeNotifier {
     // Mesajı kaydet
     batch.set(messageRef, message.toFirestore());
 
-    // Diğer katılımcıların sayısını hesapla
-    final otherParticipantsCount = participants.where((id) => id != currentUser.id).length;
-
     // Chat belgesini güncelle
     batch.update(_firestore.collection(_collection).doc(chatId), {
       'lastMessage': message.toFirestore(),
       'updatedAt': Timestamp.fromDate(now),
-      'unreadCount': otherParticipantsCount,
+      'unreadCount': FieldValue.increment(1),
     });
 
     // Batch'i commit et
