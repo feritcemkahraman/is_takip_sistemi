@@ -174,6 +174,8 @@ class ChatModel {
 
   int getUnreadCount(String userId) {
     if (lastMessage == null) return 0;
+    if (lastMessage!.senderId == userId) return 0;
+    if (lastMessage!.readBy.contains(userId)) return 0;
     return unreadCount;
   }
 

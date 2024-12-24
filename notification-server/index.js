@@ -35,9 +35,25 @@ app.post('/send-notification', async (req, res) => {
     const { token, title, body, data } = req.body;
 
     if (!token) {
-      return res.status(400).json({ error: 'FCM token gerekli' });
+      console.error('FCM token eksik');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'FCM token gerekli' 
+      });
     }
 
+    if (!title || !body) {
+      console.error('Başlık veya mesaj içeriği eksik');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Başlık ve mesaj içeriği gerekli' 
+      });
+    }
+
+    console.log(`Bildirim gönderiliyor - Token: ${token.substring(0, 10)}...`);
+    console.log(`Başlık: ${title}`);
+    console.log(`İçerik: ${body}`);
+    
     const message = {
       notification: {
         title,
@@ -49,11 +65,42 @@ app.post('/send-notification', async (req, res) => {
 
     const response = await admin.messaging().send(message);
     console.log('Bildirim başarıyla gönderildi:', response);
-    res.json({ success: true, messageId: response });
+    
+    res.status(200).json({ 
+      success: true, 
+      messageId: response,
+      timestamp: new Date().toISOString()
+    });
 
   } catch (error) {
     console.error('Bildirim gönderme hatası:', error);
-    res.status(500).json({ error: error.message });
+    
+    // Firebase'den gelen hataları daha detaylı işle
+    if (error.code === 'messaging/invalid-argument') {
+      return res.status(400).json({
+        success: false,
+        error: 'Geçersiz bildirim parametreleri',
+        details: error.message
+      });
+    } else if (error.code === 'messaging/invalid-registration-token') {
+      return res.status(400).json({
+        success: false,
+        error: 'Geçersiz FCM token',
+        details: error.message
+      });
+    } else if (error.code === 'messaging/registration-token-not-registered') {
+      return res.status(400).json({
+        success: false,
+        error: 'FCM token artık geçerli değil',
+        details: error.message
+      });
+    }
+
+    res.status(500).json({ 
+      success: false, 
+      error: 'Bildirim gönderilirken bir hata oluştu',
+      details: error.message
+    });
   }
 });
 

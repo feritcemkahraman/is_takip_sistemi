@@ -265,8 +265,10 @@ class ChatService extends ChangeNotifier {
         for (final doc in messagesSnapshot.docs) {
           final data = doc.data();
           final List<dynamic> readBy = List<dynamic>.from(data['readBy'] ?? []);
+          final String senderId = data['senderId'] as String;
           
-          if (!readBy.contains(currentUser.id)) {
+          // Sadece başkasının gönderdiği ve henüz okunmamış mesajları işaretle
+          if (senderId != currentUser.id && !readBy.contains(currentUser.id)) {
             batch.update(doc.reference, {
               'readBy': FieldValue.arrayUnion([currentUser.id])
             });

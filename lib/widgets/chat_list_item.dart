@@ -57,26 +57,71 @@ class ChatListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lastMessage = chat.lastMessage;
+    final unreadCount = chat.getUnreadCount(currentUserId);
+
     return ListTile(
       onTap: onTap,
       leading: CircleAvatar(
         backgroundColor: Theme.of(context).primaryColor,
         child: Text(
-          chat.name.substring(0, 1).toUpperCase(),
+          chat.name.isNotEmpty ? chat.name[0].toUpperCase() : '?',
           style: const TextStyle(color: Colors.white),
         ),
       ),
-      title: Text(
-        chat.name,
-        style: const TextStyle(fontWeight: FontWeight.bold),
-      ),
-      subtitle: chat.lastMessage != null
-          ? Text(
-              _getLastMessagePreview(chat.lastMessage),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              chat.name,
+              style: TextStyle(
+                fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-            )
-          : const Text('Henüz mesaj yok'),
+            ),
+          ),
+          if (lastMessage != null)
+            Text(
+              timeago.format(lastMessage.createdAt, locale: 'tr'),
+              style: TextStyle(
+                fontSize: 12,
+                color: unreadCount > 0 ? Colors.blue : Colors.grey,
+              ),
+            ),
+        ],
+      ),
+      subtitle: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _getLastMessagePreview(lastMessage),
+              style: TextStyle(
+                color: unreadCount > 0 ? Colors.black87 : Colors.grey,
+                fontWeight: unreadCount > 0 ? FontWeight.w500 : FontWeight.normal,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (unreadCount > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                unreadCount.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+        ],
+      ),
       trailing: PopupMenuButton<String>(
         icon: const Icon(Icons.more_vert),
         onSelected: (value) async {
