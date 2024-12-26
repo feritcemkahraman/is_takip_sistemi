@@ -1,64 +1,31 @@
 import 'package:socket_io_client/socket_io_client.dart' as IO;
-import 'notification_service.dart';
+import '../config/api_config.dart';
 
 class SocketService {
   static IO.Socket? _socket;
   static String? _userId;
 
   static void init(String userId) {
-    if (_socket != null) {
-      _socket!.disconnect();
-    }
-
     _userId = userId;
-
-    _socket = IO.io('http://localhost:3000', <String, dynamic>{
+    
+    _socket = IO.io(ApiConfig.baseUrl, <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
+      'query': {'userId': userId},
     });
 
-    _socket!.connect();
-    _socket!.emit('joinUser', userId);
+    _socket?.connect();
 
-    _setupListeners();
-  }
-
-  static void _setupListeners() {
-    _socket?.on('taskNotification', (data) {
-      NotificationService.showTaskNotification(
-        title: data['title'],
-        body: data['body'],
-        payload: data['taskId'],
-      );
+    _socket?.onConnect((_) {
+      print('Socket.IO bağlantısı kuruldu');
     });
 
-    _socket?.on('messageNotification', (data) {
-      NotificationService.showMessageNotification(
-        title: data['title'],
-        body: data['body'],
-        payload: data['messageId'],
-      );
+    _socket?.onDisconnect((_) {
+      print('Socket.IO bağlantısı kesildi');
     });
 
-    _socket?.on('userTyping', (data) {
-      // Kullanıcı yazıyor bildirimi için event yayınla
-      // Provider veya başka bir state management çözümü ile kullanılabilir
-    });
-  }
-
-  static void joinTask(String taskId) {
-    _socket?.emit('joinTask', taskId);
-  }
-
-  static void leaveTask(String taskId) {
-    _socket?.emit('leaveTask', taskId);
-  }
-
-  static void sendTypingStatus(String receiverId, bool isTyping) {
-    _socket?.emit('typing', {
-      'userId': _userId,
-      'receiverId': receiverId,
-      'typing': isTyping,
+    _socket?.onError((error) {
+      print('Socket.IO hatası: $error');
     });
   }
 
@@ -66,5 +33,44 @@ class SocketService {
     _socket?.disconnect();
     _socket = null;
     _userId = null;
+  }
+
+  static void joinTask(String taskId) {
+    _socket?.emit('join_task', {'taskId': taskId});
+  }
+
+  static void leaveTask(String taskId) {
+    _socket?.emit('leave_task', {'taskId': taskId});
+  }
+
+  static void onMessageReceived(Function(Map<String, dynamic>) callback) {
+    _socket?.on('message', (data) => callback(data));
+  }
+
+  static void onTaskUpdated(Function(Map<String, dynamic>) callback) {
+    _socket?.on('task_updated', (data) => callback(data));
+  }
+
+  static void onCommentAdded(Function(Map<String, dynamic>) callback) {
+    _socket?.on('comment_added', (data) => callback(data));
+  }
+
+  static void onTypingStatusChanged(Function(Map<String, dynamic>) callback) {
+    _socket?.on('typing', (data) => callback(data));
+  }
+
+  static void sendTypingStatus(String receiverId, bool isTyping) {
+    _socket?.emit('typing', {
+      'receiverId': receiverId,
+      'typing': isTyping,
+    });
+  }
+
+  static void onUserStatusChanged(Function(Map<String, dynamic>) callback) {
+    _socket?.on('user_status', (data) => callback(data));
+  }
+
+  static void updateUserStatus(String status) {
+    _socket?.emit('user_status', {'status': status});
   }
 } 

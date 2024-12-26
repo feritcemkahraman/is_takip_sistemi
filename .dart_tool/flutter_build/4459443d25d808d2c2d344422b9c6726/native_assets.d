@@ -1,0 +1,1 @@
+ C:\\Projects\\is_takip_sistemi\\.dart_tool\\flutter_build\\4459443d25d808d2c2d344422b9c6726\\native_assets.yaml: 

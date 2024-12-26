@@ -7,8 +7,8 @@ import 'services/notification_service.dart';
 import 'services/socket_service.dart';
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
-import 'pages/admin_dashboard_page.dart';
-import 'pages/employee_dashboard_page.dart';
+import 'screens/admin/admin_dashboard_screen.dart';
+import 'screens/employee/employee_dashboard_screen.dart';
 import 'pages/task_details_page.dart';
 import 'pages/chat_page.dart';
 

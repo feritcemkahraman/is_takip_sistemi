@@ -4,7 +4,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:mime/mime.dart';
 import '../config/api_config.dart';
-import 'package:shared_preferences.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FileService {
   static Future<String> uploadFile(File file) async {

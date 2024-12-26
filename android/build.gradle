@@ -1,19 +1,13 @@
 buildscript {
-    ext {
-        kotlin_version = '1.9.22'
-        java_version = JavaVersion.VERSION_17
-    }
+    ext.kotlin_version = '1.7.10'
     repositories {
         google()
         mavenCentral()
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.2.1'
+        classpath 'com.android.tools.build:gradle:7.3.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-        classpath 'com.google.gms:google-services:4.4.0'
-        classpath 'com.google.firebase:firebase-crashlytics-gradle:2.9.9'
-        classpath 'com.google.firebase:perf-plugin:1.4.2'
     }
 }
 
@@ -27,59 +21,9 @@ allprojects {
 rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
-    
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            android {
-                compileSdkVersion 34
-                
-                namespace project.name == 'app' ? "com.example.is_takip_sistemi" :
-                    project.name == 'firebase_messaging' ? "io.flutter.plugins.firebase.messaging" :
-                    project.name == 'emoji_picker_flutter' ? "com.fintasys.emoji_picker_flutter" :
-                    project.name == 'audioplayers_android' ? "xyz.luan.audioplayers" :
-                    project.name == 'firebase_analytics' ? "io.flutter.plugins.firebase.analytics" :
-                    project.name == 'firebase_crashlytics' ? "io.flutter.plugins.firebase.crashlytics" :
-                    project.name == 'flutter_local_notifications' ? "com.dexterous.flutterlocalnotifications" :
-                    project.name == 'firebase_core' ? "io.flutter.plugins.firebase.core" :
-                    project.name == 'cloud_firestore' ? "io.flutter.plugins.firebase.firestore" :
-                    project.name == 'firebase_storage' ? "io.flutter.plugins.firebase.storage" :
-                    project.name == 'file_picker' ? "com.mr.flutter.plugin.filepicker" :
-                    project.name == 'firebase_auth' ? "io.flutter.plugins.firebase.auth" :
-                    project.name == 'flutter_sound' ? "com.dooboolab.fluttersound" :
-                    project.name == 'path_provider_android' ? "io.flutter.plugins.pathprovider" :
-                    project.name == 'permission_handler_android' ? "com.baseflow.permissionhandler" :
-                    project.name == 'image_picker_android' ? "io.flutter.plugins.imagepicker" :
-                    project.name == 'record_android' ? "com.llfbandit.record" :
-                    project.name == 'shared_preferences_android' ? "io.flutter.plugins.sharedpreferences" :
-                    project.name == 'url_launcher_android' ? "io.flutter.plugins.urllauncher" :
-                    project.name == 'share_plus' ? "dev.fluttercommunity.plus.share" :
-                    "io.flutter.plugins.${project.name}"
-
-                compileOptions {
-                    sourceCompatibility java_version
-                    targetCompatibility java_version
-                }
-            }
-
-            if (project.plugins.hasPlugin('kotlin-android')) {
-                project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                    kotlinOptions {
-                        jvmTarget = java_version.toString()
-                    }
-                }
-            }
-        }
-    }
-    
+}
+subprojects {
     project.evaluationDependsOn(':app')
-    project.configurations.all {
-        resolutionStrategy.eachDependency { details ->
-            if (details.requested.group == 'androidx.core' &&
-                !details.requested.name.contains('androidx')) {
-                details.useVersion "1.10.1"
-            }
-        }
-    }
 }
 
 tasks.register("clean", Delete) {

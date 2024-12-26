@@ -3,7 +3,8 @@ import '../models/task.dart';
 import '../services/api_service.dart';
 import '../services/socket_service.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TaskDetailsPage extends StatefulWidget {
   final String taskId;
