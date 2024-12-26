@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class TaskModel {
   final String id;
   final String title;
@@ -8,11 +6,11 @@ class TaskModel {
   final String createdBy;
   final DateTime createdAt;
   final DateTime deadline;
+  final int priority;
+  final String status;
   final DateTime? completedAt;
-  final String status; // 'active', 'pending', 'completed'
-  final int priority; // 1: Düşük, 2: Orta, 3: Yüksek
   final List<String> attachments;
-  final Map<String, dynamic> metadata;
+  final List<CommentModel> comments;
 
   TaskModel({
     required this.id,
@@ -22,47 +20,48 @@ class TaskModel {
     required this.createdBy,
     required this.createdAt,
     required this.deadline,
-    this.completedAt,
-    required this.status,
     required this.priority,
-    required this.attachments,
-    required this.metadata,
+    required this.status,
+    this.completedAt,
+    this.attachments = const [],
+    this.comments = const [],
   });
 
-  factory TaskModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  factory TaskModel.fromJson(Map<String, dynamic> json) {
     return TaskModel(
-      id: doc.id,
-      title: data['title'] ?? '',
-      description: data['description'] ?? '',
-      assignedTo: data['assignedTo'] ?? '',
-      createdBy: data['createdBy'] ?? '',
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
-      deadline: (data['deadline'] as Timestamp).toDate(),
-      completedAt: data['completedAt'] != null
-          ? (data['completedAt'] as Timestamp).toDate()
-          : null,
-      status: data['status'] ?? 'pending',
-      priority: data['priority'] ?? 1,
-      attachments: List<String>.from(data['attachments'] ?? []),
-      metadata: data['metadata'] ?? {},
+      id: json['_id'],
+      title: json['title'],
+      description: json['description'],
+      assignedTo: json['assignedTo'],
+      createdBy: json['createdBy'],
+      createdAt: DateTime.parse(json['createdAt']),
+      deadline: DateTime.parse(json['deadline']),
+      priority: json['priority'],
+      status: json['status'],
+      completedAt: json['completedAt'] != null 
+        ? DateTime.parse(json['completedAt'])
+        : null,
+      attachments: List<String>.from(json['attachments'] ?? []),
+      comments: (json['comments'] as List<dynamic>?)
+          ?.map((comment) => CommentModel.fromJson(comment))
+          .toList() ?? [],
     );
   }
 
-  Map<String, dynamic> toFirestore() {
+  Map<String, dynamic> toJson() {
     return {
+      '_id': id,
       'title': title,
       'description': description,
       'assignedTo': assignedTo,
       'createdBy': createdBy,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'deadline': Timestamp.fromDate(deadline),
-      'completedAt':
-          completedAt != null ? Timestamp.fromDate(completedAt!) : null,
-      'status': status,
+      'createdAt': createdAt.toIso8601String(),
+      'deadline': deadline.toIso8601String(),
       'priority': priority,
+      'status': status,
+      'completedAt': completedAt?.toIso8601String(),
       'attachments': attachments,
-      'metadata': metadata,
+      'comments': comments.map((comment) => comment.toJson()).toList(),
     };
   }
 
@@ -74,11 +73,11 @@ class TaskModel {
     String? createdBy,
     DateTime? createdAt,
     DateTime? deadline,
-    DateTime? completedAt,
-    String? status,
     int? priority,
+    String? status,
+    DateTime? completedAt,
     List<String>? attachments,
-    Map<String, dynamic>? metadata,
+    List<CommentModel>? comments,
   }) {
     return TaskModel(
       id: id ?? this.id,
@@ -88,29 +87,43 @@ class TaskModel {
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       deadline: deadline ?? this.deadline,
-      completedAt: completedAt ?? this.completedAt,
-      status: status ?? this.status,
       priority: priority ?? this.priority,
+      status: status ?? this.status,
+      completedAt: completedAt ?? this.completedAt,
       attachments: attachments ?? this.attachments,
-      metadata: metadata ?? this.metadata,
+      comments: comments ?? this.comments,
+    );
+  }
+}
+
+class CommentModel {
+  final String id;
+  final String userId;
+  final String content;
+  final DateTime createdAt;
+
+  CommentModel({
+    required this.id,
+    required this.userId,
+    required this.content,
+    required this.createdAt,
+  });
+
+  factory CommentModel.fromJson(Map<String, dynamic> json) {
+    return CommentModel(
+      id: json['_id'],
+      userId: json['userId'],
+      content: json['content'],
+      createdAt: DateTime.parse(json['createdAt']),
     );
   }
 
-  // Görevin bitiş tarihinin geçip geçmediğini kontrol et
-  bool get isOverdue => DateTime.now().isAfter(deadline);
-
-  // Görevin tamamlanıp tamamlanmadığını kontrol et
-  bool get isCompleted => status == 'completed';
-
-  // Görevin ilerleme durumunu hesapla
-  int get progress {
-    switch (status) {
-      case 'completed':
-        return 100;
-      case 'active':
-        return 50;
-      default:
-        return 0;
-    }
+  Map<String, dynamic> toJson() {
+    return {
+      '_id': id,
+      'userId': userId,
+      'content': content,
+      'createdAt': createdAt.toIso8601String(),
+    };
   }
 }

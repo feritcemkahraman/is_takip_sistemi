@@ -1,121 +1,77 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart' as auth;
-
 class UserModel {
   final String id;
-  final String email;
-  final String name;
   final String username;
+  final String email;
   final String role;
-  final String department;
-  final DateTime createdAt;
   final String? avatar;
-  final String? phoneNumber;
-  final String? title;
+  final String status;
+  final DateTime createdAt;
   final DateTime? lastLoginAt;
-  final Map<String, dynamic> metadata;
-  final String? fcmToken;
-
-  static const String roleAdmin = 'admin';
-  static const String roleUser = 'user';
-  static const String roleEmployee = 'employee';
+  final List<String> permissions;
 
   UserModel({
     required this.id,
-    required this.email,
-    required this.name,
     required this.username,
+    required this.email,
     required this.role,
-    required this.department,
-    required this.createdAt,
     this.avatar,
-    this.phoneNumber,
-    this.title,
+    required this.status,
+    required this.createdAt,
     this.lastLoginAt,
-    this.metadata = const {},
-    this.fcmToken,
+    this.permissions = const [],
   });
 
-  Map<String, dynamic> toMap() {
-    return {
-      'email': email,
-      'name': name,
-      'username': username,
-      'role': role,
-      'department': department,
-      'createdAt': createdAt.toIso8601String(),
-      'avatar': avatar,
-      'phoneNumber': phoneNumber,
-      'title': title,
-      'lastLoginAt': lastLoginAt?.toIso8601String(),
-      'metadata': metadata,
-      'fcmToken': fcmToken,
-    };
-  }
-
-  factory UserModel.fromMap(Map<String, dynamic> map) {
+  factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
-      id: map['id'] ?? '',
-      email: map['email'] ?? '',
-      name: map['name'] ?? '',
-      username: map['username'] ?? map['email'] ?? '',
-      role: map['role'] ?? '',
-      department: map['department'] ?? '',
-      createdAt: map['createdAt'] is Timestamp 
-          ? (map['createdAt'] as Timestamp).toDate()
-          : DateTime.parse(map['createdAt'] ?? DateTime.now().toIso8601String()),
-      avatar: map['avatar'],
-      phoneNumber: map['phoneNumber'],
-      title: map['title'],
-      lastLoginAt: map['lastLoginAt'] != null 
-          ? map['lastLoginAt'] is Timestamp
-              ? (map['lastLoginAt'] as Timestamp).toDate()
-              : DateTime.parse(map['lastLoginAt'])
-          : null,
-      metadata: Map<String, dynamic>.from(map['metadata'] ?? {}),
-      fcmToken: map['fcmToken'],
+      id: json['_id'],
+      username: json['username'],
+      email: json['email'],
+      role: json['role'],
+      avatar: json['avatar'],
+      status: json['status'],
+      createdAt: DateTime.parse(json['createdAt']),
+      lastLoginAt: json['lastLoginAt'] != null 
+        ? DateTime.parse(json['lastLoginAt'])
+        : null,
+      permissions: List<String>.from(json['permissions'] ?? []),
     );
   }
 
-  factory UserModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data()!;
-    return UserModel.fromMap({...data, 'id': doc.id});
+  Map<String, dynamic> toJson() {
+    return {
+      '_id': id,
+      'username': username,
+      'email': email,
+      'role': role,
+      'avatar': avatar,
+      'status': status,
+      'createdAt': createdAt.toIso8601String(),
+      'lastLoginAt': lastLoginAt?.toIso8601String(),
+      'permissions': permissions,
+    };
   }
 
   UserModel copyWith({
     String? id,
-    String? email,
-    String? name,
     String? username,
+    String? email,
     String? role,
-    String? department,
     String? avatar,
-    String? phoneNumber,
-    String? title,
+    String? status,
     DateTime? createdAt,
     DateTime? lastLoginAt,
-    Map<String, dynamic>? metadata,
-    String? fcmToken,
+    List<String>? permissions,
   }) {
     return UserModel(
       id: id ?? this.id,
-      email: email ?? this.email,
-      name: name ?? this.name,
       username: username ?? this.username,
+      email: email ?? this.email,
       role: role ?? this.role,
-      department: department ?? this.department,
       avatar: avatar ?? this.avatar,
-      phoneNumber: phoneNumber ?? this.phoneNumber,
-      title: title ?? this.title,
+      status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
-      metadata: metadata ?? this.metadata,
-      fcmToken: fcmToken ?? this.fcmToken,
+      permissions: permissions ?? this.permissions,
     );
-  }
-
-  @override
-  String toString() {
-    return 'UserModel{id: $id, name: $name, email: $email, role: $role, department: $department, createdAt: $createdAt}';
   }
 }

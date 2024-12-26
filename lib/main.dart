@@ -1,26 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:fixnum/fixnum.dart';
-import 'services/api_service.dart';
-import 'services/notification_service.dart';
-import 'services/socket_service.dart';
-import 'pages/login_page.dart';
-import 'pages/register_page.dart';
-import 'screens/admin/admin_dashboard_screen.dart';
-import 'screens/employee/employee_dashboard_screen.dart';
-import 'pages/task_details_page.dart';
-import 'pages/chat_page.dart';
+import 'package:is_takip_sistemi/providers/auth_provider.dart';
+import 'package:is_takip_sistemi/providers/task_provider.dart';
+import 'package:is_takip_sistemi/providers/chat_provider.dart';
+import 'package:is_takip_sistemi/providers/notification_provider.dart';
+import 'package:is_takip_sistemi/screens/splash_screen.dart';
+import 'package:is_takip_sistemi/services/notification_service.dart';
+import 'package:is_takip_sistemi/theme/app_theme.dart';
+import 'package:logger/logger.dart';
+
+final logger = Logger();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // API servisini başlat
-  await ApiService.init();
-  
-  // Bildirim servisini başlat
-  await NotificationService.init();
-  
+  await dotenv.load(fileName: ".env");
+  await NotificationService().initialize();
+
   runApp(const MyApp());
 }
 
@@ -29,76 +26,20 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'İş Takip Sistemi',
-      navigatorKey: NotificationService.navigatorKey,
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
-      initialRoute: '/',
-      routes: {
-        '/': (context) => const AuthWrapper(),
-        '/login': (context) => const LoginPage(),
-        '/register': (context) => const RegisterPage(),
-        '/admin-dashboard': (context) => const AdminDashboardPage(),
-        '/employee-dashboard': (context) => const EmployeeDashboardPage(),
-        '/task-details': (context) => TaskDetailsPage(
-          taskId: ModalRoute.of(context)?.settings.arguments as String,
-        ),
-        '/chat': (context) => ChatPage(
-          userId: ModalRoute.of(context)?.settings.arguments as String,
-        ),
-      },
-    );
-  }
-}
-
-class AuthWrapper extends StatefulWidget {
-  const AuthWrapper({super.key});
-
-  @override
-  State<AuthWrapper> createState() => _AuthWrapperState();
-}
-
-class _AuthWrapperState extends State<AuthWrapper> {
-  @override
-  void initState() {
-    super.initState();
-    _checkAuth();
-  }
-
-  Future<void> _checkAuth() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    final userId = prefs.getString('userId');
-    final userRole = prefs.getString('userRole');
-    
-    if (token != null && userId != null) {
-      // Socket.IO bağlantısını başlat
-      SocketService.init(userId);
-      
-      // Kullanıcı rolüne göre yönlendir
-      if (mounted) {
-        if (userRole == 'admin') {
-          Navigator.of(context).pushReplacementNamed('/admin-dashboard');
-        } else {
-          Navigator.of(context).pushReplacementNamed('/employee-dashboard');
-        }
-      }
-    } else {
-      // Giriş sayfasına yönlendir
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/login');
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: CircularProgressIndicator(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => TaskProvider()),
+        ChangeNotifierProvider(create: (_) => ChatProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
+      ],
+      child: MaterialApp(
+        title: 'İş Takip Sistemi',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: ThemeMode.system,
+        home: const SplashScreen(),
       ),
     );
   }

@@ -1,230 +1,184 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../config/api_config.dart';
-import '../models/task_model.dart';
+import 'package:is_takip_sistemi/config/api_config.dart';
+import 'package:is_takip_sistemi/models/task_model.dart';
+import 'package:socket_io_client/socket_io_client.dart' as io;
 
 class TaskService {
-  final String baseUrl = ApiConfig.baseUrl;
+  final http.Client _client;
+  late final io.Socket _socket;
 
-  Future<Map<String, String>> _getHeaders() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    return {
-      'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
-    };
+  TaskService({http.Client? client}) : _client = client ?? http.Client() {
+    _socket = io.io(
+      ApiConfig.socketUrl,
+      io.OptionBuilder()
+          .setTransports(['websocket'])
+          .disableAutoConnect()
+          .build(),
+    );
   }
 
-  Future<List<TaskModel>> getAllTasks() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/tasks'),
-        headers: await _getHeaders(),
-      );
+  Future<void> connect() async {
+    final token = await _getToken();
+    if (token != null) {
+      _socket.io.options?['extraHeaders'] = {
+        'Authorization': 'Bearer $token'
+      };
+      _socket.connect();
+    }
+  }
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.map((json) => TaskModel.fromJson(json)).toList();
-      } else {
-        throw Exception(jsonDecode(response.body)['error']);
-      }
-    } catch (e) {
-      throw Exception('Görevler alınırken bir hata oluştu: $e');
+  void disconnect() {
+    _socket.disconnect();
+  }
+
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('token');
+  }
+
+  Future<TaskModel> createTask({
+    required String title,
+    required String description,
+    required String assignedTo,
+    required DateTime deadline,
+    required int priority,
+  }) async {
+    final token = await _getToken();
+    final response = await _client.post(
+      Uri.parse('${ApiConfig.baseUrl}${ApiConfig.tasks}'),
+      headers: ApiConfig.getHeaders(token: token),
+      body: jsonEncode({
+        'title': title,
+        'description': description,
+        'assignedTo': assignedTo,
+        'deadline': deadline.toIso8601String(),
+        'priority': priority,
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      return TaskModel.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Görev oluşturulamadı');
+    }
+  }
+
+  Future<List<TaskModel>> getTasks({
+    String? assignedTo,
+    String? status,
+    int? priority,
+  }) async {
+    final token = await _getToken();
+    final queryParams = <String, String>{};
+    if (assignedTo != null) queryParams['assignedTo'] = assignedTo;
+    if (status != null) queryParams['status'] = status;
+    if (priority != null) queryParams['priority'] = priority.toString();
+
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.tasks}')
+        .replace(queryParameters: queryParams);
+
+    final response = await _client.get(
+      uri,
+      headers: ApiConfig.getHeaders(token: token),
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((json) => TaskModel.fromJson(json)).toList();
+    } else {
+      throw Exception('Görevler alınamadı');
     }
   }
 
   Future<TaskModel> getTaskById(String taskId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/tasks/$taskId'),
-        headers: await _getHeaders(),
-      );
+    final token = await _getToken();
+    final response = await _client.get(
+      Uri.parse('${ApiConfig.baseUrl}${ApiConfig.taskById}$taskId'),
+      headers: ApiConfig.getHeaders(token: token),
+    );
 
-      if (response.statusCode == 200) {
-        return TaskModel.fromJson(jsonDecode(response.body));
-      } else {
-        throw Exception(jsonDecode(response.body)['error']);
-      }
-    } catch (e) {
-      throw Exception('Görev alınırken bir hata oluştu: $e');
+    if (response.statusCode == 200) {
+      return TaskModel.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Görev bulunamadı');
     }
   }
 
-  Future<TaskModel> createTask(Map<String, dynamic> taskData) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/tasks'),
-        headers: await _getHeaders(),
-        body: jsonEncode(taskData),
-      );
+  Future<TaskModel> updateTask(
+    String taskId, {
+    String? title,
+    String? description,
+    String? assignedTo,
+    DateTime? deadline,
+    int? priority,
+    String? status,
+  }) async {
+    final token = await _getToken();
+    final response = await _client.put(
+      Uri.parse('${ApiConfig.baseUrl}${ApiConfig.taskById}$taskId'),
+      headers: ApiConfig.getHeaders(token: token),
+      body: jsonEncode({
+        if (title != null) 'title': title,
+        if (description != null) 'description': description,
+        if (assignedTo != null) 'assignedTo': assignedTo,
+        if (deadline != null) 'deadline': deadline.toIso8601String(),
+        if (priority != null) 'priority': priority,
+        if (status != null) 'status': status,
+      }),
+    );
 
-      if (response.statusCode == 201) {
-        return TaskModel.fromJson(jsonDecode(response.body));
-      } else {
-        throw Exception(jsonDecode(response.body)['error']);
-      }
-    } catch (e) {
-      throw Exception('Görev oluşturulurken bir hata oluştu: $e');
-    }
-  }
-
-  Future<TaskModel> updateTask(String taskId, Map<String, dynamic> taskData) async {
-    try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/tasks/$taskId'),
-        headers: await _getHeaders(),
-        body: jsonEncode(taskData),
-      );
-
-      if (response.statusCode == 200) {
-        return TaskModel.fromJson(jsonDecode(response.body));
-      } else {
-        throw Exception(jsonDecode(response.body)['error']);
-      }
-    } catch (e) {
-      throw Exception('Görev güncellenirken bir hata oluştu: $e');
+    if (response.statusCode == 200) {
+      return TaskModel.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Görev güncellenemedi');
     }
   }
 
   Future<void> deleteTask(String taskId) async {
-    try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl/tasks/$taskId'),
-        headers: await _getHeaders(),
-      );
+    final token = await _getToken();
+    final response = await _client.delete(
+      Uri.parse('${ApiConfig.baseUrl}${ApiConfig.taskById}$taskId'),
+      headers: ApiConfig.getHeaders(token: token),
+    );
 
-      if (response.statusCode != 200) {
-        throw Exception(jsonDecode(response.body)['error']);
-      }
-    } catch (e) {
-      throw Exception('Görev silinirken bir hata oluştu: $e');
+    if (response.statusCode != 204) {
+      throw Exception('Görev silinemedi');
     }
   }
 
-  Future<List<TaskModel>> getTasksByStatus(String status) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/tasks?status=$status'),
-        headers: await _getHeaders(),
-      );
+  Future<CommentModel> addComment(String taskId, String content) async {
+    final token = await _getToken();
+    final response = await _client.post(
+      Uri.parse('${ApiConfig.baseUrl}${ApiConfig.taskComments}$taskId'),
+      headers: ApiConfig.getHeaders(token: token),
+      body: jsonEncode({
+        'content': content,
+      }),
+    );
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.map((json) => TaskModel.fromJson(json)).toList();
-      } else {
-        throw Exception(jsonDecode(response.body)['error']);
-      }
-    } catch (e) {
-      throw Exception('Görevler alınırken bir hata oluştu: $e');
+    if (response.statusCode == 201) {
+      return CommentModel.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Yorum eklenemedi');
     }
   }
 
-  Future<List<TaskModel>> getTasksByAssignee(String userId) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/tasks?assignee=$userId'),
-        headers: await _getHeaders(),
-      );
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.map((json) => TaskModel.fromJson(json)).toList();
-      } else {
-        throw Exception(jsonDecode(response.body)['error']);
-      }
-    } catch (e) {
-      throw Exception('Görevler alınırken bir hata oluştu: $e');
-    }
+  Stream<TaskModel> onTaskUpdated() {
+    return _socket.fromEvent('task_updated').map((data) {
+      return TaskModel.fromJson(data);
+    });
   }
 
-  Future<void> addComment(String taskId, String content) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/tasks/$taskId/comments'),
-        headers: await _getHeaders(),
-        body: jsonEncode({'content': content}),
-      );
-
-      if (response.statusCode != 201) {
-        throw Exception(jsonDecode(response.body)['error']);
-      }
-    } catch (e) {
-      throw Exception('Yorum eklenirken bir hata oluştu: $e');
-    }
+  Stream<CommentModel> onNewComment() {
+    return _socket.fromEvent('new_comment').map((data) {
+      return CommentModel.fromJson(data);
+    });
   }
 
-  Future<void> updateTaskStatus(String taskId, String status) async {
-    try {
-      final response = await http.patch(
-        Uri.parse('$baseUrl/tasks/$taskId/status'),
-        headers: await _getHeaders(),
-        body: jsonEncode({'status': status}),
-      );
-
-      if (response.statusCode != 200) {
-        throw Exception(jsonDecode(response.body)['error']);
-      }
-    } catch (e) {
-      throw Exception('Görev durumu güncellenirken bir hata oluştu: $e');
-    }
-  }
-
-  Future<void> assignTask(String taskId, String userId) async {
-    try {
-      final response = await http.patch(
-        Uri.parse('$baseUrl/tasks/$taskId/assign'),
-        headers: await _getHeaders(),
-        body: jsonEncode({'assigneeId': userId}),
-      );
-
-      if (response.statusCode != 200) {
-        throw Exception(jsonDecode(response.body)['error']);
-      }
-    } catch (e) {
-      throw Exception('Görev atanırken bir hata oluştu: $e');
-    }
-  }
-
-  Future<void> uploadTaskAttachment(String taskId, List<int> fileBytes, String filename) async {
-    try {
-      final uri = Uri.parse('$baseUrl/tasks/$taskId/attachments');
-      final request = http.MultipartRequest('POST', uri);
-      
-      final headers = await _getHeaders();
-      request.headers.addAll(headers);
-      
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          fileBytes,
-          filename: filename,
-        ),
-      );
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode != 201) {
-        throw Exception(jsonDecode(response.body)['error']);
-      }
-    } catch (e) {
-      throw Exception('Dosya yüklenirken bir hata oluştu: $e');
-    }
-  }
-
-  Future<void> deleteTaskAttachment(String taskId, String attachmentId) async {
-    try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl/tasks/$taskId/attachments/$attachmentId'),
-        headers: await _getHeaders(),
-      );
-
-      if (response.statusCode != 200) {
-        throw Exception(jsonDecode(response.body)['error']);
-      }
-    } catch (e) {
-      throw Exception('Dosya silinirken bir hata oluştu: $e');
-    }
+  void dispose() {
+    _socket.dispose();
+    _client.close();
   }
 }
