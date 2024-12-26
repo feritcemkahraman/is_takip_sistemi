@@ -1,30 +1,41 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 
 class FirebaseConfig {
+  static bool _initialized = false;
+
   static Future<void> initialize() async {
-    await Firebase.initializeApp(
-      options: const FirebaseOptions(
-        apiKey: String.fromEnvironment('FIREBASE_API_KEY'),
-        appId: String.fromEnvironment('FIREBASE_APP_ID'),
-        messagingSenderId: String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID'),
-        projectId: String.fromEnvironment('FIREBASE_PROJECT_ID'),
-        authDomain: String.fromEnvironment('FIREBASE_AUTH_DOMAIN'),
-        storageBucket: String.fromEnvironment('FIREBASE_STORAGE_BUCKET'),
-      ),
-    );
+    if (_initialized) {
+      debugPrint('FirebaseConfig zaten başlatılmış durumda');
+      return;
+    }
 
-    // Enable offline persistence
-    await FirebaseFirestore.instance.enablePersistence(
-      const PersistenceSettings(synchronizeTabs: true),
-    );
+    try {
+      // Firestore ayarlarını yap
+      FirebaseFirestore.instance.settings = const Settings(
+        cacheSizeBytes: 100 * 1024 * 1024,
+        persistenceEnabled: true,
+        sslEnabled: true,
+      );
 
-    // Set cache size to 100MB
-    FirebaseFirestore.instance.settings = const Settings(
-      cacheSizeBytes: 100 * 1024 * 1024,
-      persistenceEnabled: true,
-      sslEnabled: true,
-    );
+      // Web dışı platformlarda persistence'ı etkinleştir
+      if (!kIsWeb) {
+        try {
+          await FirebaseFirestore.instance.enablePersistence(
+            const PersistenceSettings(synchronizeTabs: true),
+          );
+          debugPrint('Firestore persistence başarıyla etkinleştirildi');
+        } catch (e) {
+          debugPrint('Persistence etkinleştirme hatası (kritik değil): $e');
+        }
+      }
+
+      _initialized = true;
+      debugPrint('FirebaseConfig başarıyla başlatıldı');
+    } catch (e) {
+      debugPrint('FirebaseConfig başlatma hatası: $e');
+      rethrow;
+    }
   }
 
   static FirebaseFirestore getFirestore() {

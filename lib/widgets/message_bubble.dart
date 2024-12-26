@@ -55,23 +55,36 @@ class MessageBubble extends StatelessWidget {
 
     switch (message.type) {
       case MessageModel.typeImage:
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.file(
-            File(message.attachmentUrl!),
-            width: 200,
-            height: 200,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) {
-              return Container(
-                width: 200,
-                height: 200,
-                color: Colors.grey[300],
-                child: const Center(
-                  child: Icon(Icons.error),
-                ),
-              );
-            },
+        return GestureDetector(
+          onTap: () {
+            // TODO: Tam ekran görüntüleme eklenecek
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.file(
+              File(message.attachmentUrl!),
+              width: 200,
+              height: 200,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                print('Fotoğraf yükleme hatası: $error');
+                return Container(
+                  width: 200,
+                  height: 200,
+                  color: Colors.grey[300],
+                  child: const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error),
+                        SizedBox(height: 8),
+                        Text('Fotoğraf yüklenemedi', textAlign: TextAlign.center),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         );
       case MessageModel.typeFile:

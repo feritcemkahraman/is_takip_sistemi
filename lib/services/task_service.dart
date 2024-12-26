@@ -176,17 +176,16 @@ class TaskService with ChangeNotifier {
       try {
         final userService = UserService();
         final assignedUser = await userService.getUserById(assignedTo);
+        final fcmToken = assignedUser?.fcmToken;
         
-        if (assignedUser?.fcmToken != null) {
+        if (fcmToken != null) {
           final notificationService = NotificationService(userService: userService);
-          await notificationService.sendNotification(
-            token: assignedUser!.fcmToken!,
-            title: 'Yeni Görev',
-            body: 'Size yeni bir görev atandı: $title',
-            data: {
-              'type': 'task_assigned',
-              'taskId': task.id,
-            },
+          await notificationService.sendChatNotification(
+            token: fcmToken,
+            sender: 'İş Takip Sistemi',
+            message: 'Yeni görev: $title',
+            chatId: task.id,
+            messageType: 'task',
           );
           print('Notification sent to user: $assignedTo'); // Debug log
         } else {
@@ -253,15 +252,15 @@ class TaskService with ChangeNotifier {
       final task = await getTask(taskId);
       if (task != null) {
         final creator = await userService.getUserById(task.createdBy);
-        if (creator != null) {
-          await notificationService.sendNotification(
-            token: creator.fcmToken ?? '',
-            title: 'Görev Tamamlandı',
-            body: '${task.title} görevi tamamlandı',
-            data: {
-              'type': 'task_completed',
-              'taskId': taskId,
-            },
+        final fcmToken = creator?.fcmToken;
+        
+        if (fcmToken != null) {
+          await notificationService.sendChatNotification(
+            token: fcmToken,
+            sender: 'İş Takip Sistemi',
+            message: '${task.title} görevi tamamlandı',
+            chatId: taskId,
+            messageType: 'task_completed',
           );
         }
       }

@@ -41,8 +41,25 @@ class LocalStorageService {
           fileName.replaceAll(RegExp(r'[^a-zA-Z0-9.]'), '_');
       final targetPath = path.join(mediaDir, safeFileName);
       
+      // Dosya boyutu kontrolü
+      final fileSize = await file.length();
+      if (fileSize > 10 * 1024 * 1024) { // 10MB limit
+        throw Exception('Dosya boyutu çok büyük (maksimum 10MB)');
+      }
+
+      // Hedef dizinin varlığını kontrol et
+      final targetDir = Directory(mediaDir);
+      if (!await targetDir.exists()) {
+        await targetDir.create(recursive: true);
+      }
+      
       // Dosyayı kopyala
-      await file.copy(targetPath);
+      final newFile = await file.copy(targetPath);
+      
+      // Dosyanın başarıyla kopyalandığını kontrol et
+      if (!await newFile.exists()) {
+        throw Exception('Dosya kaydedilemedi');
+      }
       
       return targetPath;
     } catch (e) {
@@ -178,6 +195,26 @@ class LocalStorageService {
     } catch (e) {
       print('Dosya kontrol hatası: $e');
       return false;
+    }
+  }
+
+  // Medya dosyasını getir
+  Future<File?> getMediaFile(String filePath) async {
+    try {
+      if (filePath.isEmpty) {
+        return null;
+      }
+
+      final file = File(filePath);
+      if (!await file.exists()) {
+        print('Dosya bulunamadı: $filePath');
+        return null;
+      }
+
+      return file;
+    } catch (e) {
+      print('Medya dosyası getirme hatası: $e');
+      return null;
     }
   }
 }

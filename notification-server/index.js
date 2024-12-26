@@ -29,77 +29,139 @@ app.get('/', (req, res) => {
   res.send('Bildirim sunucusu çalışıyor!');
 });
 
-// Bildirim gönderme endpoint'i
-app.post('/send-notification', async (req, res) => {
+// Anlık mesaj bildirimi gönderme
+app.post('/send-chat-notification', async (req, res) => {
   try {
-    const { token, title, body, data } = req.body;
+    const { token, sender, message, chatId, messageType } = req.body;
 
-    if (!token) {
-      console.error('FCM token eksik');
+    if (!token || !sender || !message) {
       return res.status(400).json({ 
         success: false, 
-        error: 'FCM token gerekli' 
+        error: 'Eksik parametreler' 
       });
     }
 
-    if (!title || !body) {
-      console.error('Başlık veya mesaj içeriği eksik');
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Başlık ve mesaj içeriği gerekli' 
-      });
-    }
-
-    console.log(`Bildirim gönderiliyor - Token: ${token.substring(0, 10)}...`);
-    console.log(`Başlık: ${title}`);
-    console.log(`İçerik: ${body}`);
-    
-    const message = {
+    const notificationData = {
       notification: {
-        title,
-        body,
+        title: sender,
+        body: messageType === 'image' ? '📷 Fotoğraf' : 
+              messageType === 'file' ? '📎 Dosya' : 
+              messageType === 'voice' ? '🎤 Sesli mesaj' : 
+              messageType === 'video' ? '🎥 Video' : message,
+        sound: 'default',
+        priority: 'high',
+        android_channel_id: 'chat_messages'
       },
-      data: data || {},
-      token,
+      data: {
+        chatId: chatId || '',
+        messageType: messageType || 'text',
+        click_action: 'FLUTTER_NOTIFICATION_CLICK'
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          priority: 'high',
+          channelId: 'chat_messages',
+          visibility: 'private',
+          vibrateTimingsMillis: [200, 500, 200],
+          defaultSound: true
+        }
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+            badge: 1,
+            'mutable-content': 1,
+            'content-available': 1
+          }
+        }
+      },
+      token
     };
 
-    const response = await admin.messaging().send(message);
-    console.log('Bildirim başarıyla gönderildi:', response);
+    const response = await admin.messaging().send(notificationData);
+    console.log('Bildirim gönderildi:', response);
     
     res.status(200).json({ 
       success: true, 
-      messageId: response,
-      timestamp: new Date().toISOString()
+      messageId: response 
     });
 
   } catch (error) {
-    console.error('Bildirim gönderme hatası:', error);
+    console.error('Bildirim hatası:', error);
     
-    // Firebase'den gelen hataları daha detaylı işle
-    if (error.code === 'messaging/invalid-argument') {
-      return res.status(400).json({
-        success: false,
-        error: 'Geçersiz bildirim parametreleri',
-        details: error.message
-      });
-    } else if (error.code === 'messaging/invalid-registration-token') {
-      return res.status(400).json({
-        success: false,
-        error: 'Geçersiz FCM token',
-        details: error.message
-      });
-    } else if (error.code === 'messaging/registration-token-not-registered') {
-      return res.status(400).json({
-        success: false,
-        error: 'FCM token artık geçerli değil',
-        details: error.message
-      });
+    if (error.code === 'messaging/invalid-registration-token') {
+      await handleInvalidToken(token); // Token'ı veritabanından temizle
     }
 
     res.status(500).json({ 
       success: false, 
-      error: 'Bildirim gönderilirken bir hata oluştu',
-      details: error.message
+      error: error.message 
+    });
+  }
+});
+
+// Toplu bildirim gönderme (grup mesajları için)
+app.post('/send-group-notification', async (req, res) => {
+  try {
+    const { tokens, sender, message, chatId, messageType } = req.body;
+
+    if (!tokens || !tokens.length || !sender || !message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Eksik parametreler'
+      });
+    }
+
+    const notificationData = {
+      notification: {
+        title: sender,
+        body: messageType === 'image' ? '📷 Fotoğraf' : 
+              messageType === 'file' ? '📎 Dosya' : 
+              messageType === 'voice' ? '🎤 Sesli mesaj' : 
+              messageType === 'video' ? '🎥 Video' : message,
+        sound: 'default'
+      },
+      data: {
+        chatId: chatId || '',
+        messageType: messageType || 'text',
+        click_action: 'FLUTTER_NOTIFICATION_CLICK'
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          channelId: 'chat_messages',
+          visibility: 'private'
+        }
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: 'default',
+            badge: 1
+          }
+        }
+      },
+      tokens
+    };
+
+    const response = await admin.messaging().sendMulticast(notificationData);
+    console.log('Grup bildirimi gönderildi:', response);
+
+    res.status(200).json({
+      success: true,
+      successCount: response.successCount,
+      failureCount: response.failureCount
+    });
+
+  } catch (error) {
+    console.error('Grup bildirim hatası:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -107,5 +169,5 @@ app.post('/send-notification', async (req, res) => {
 // Sunucuyu başlat
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Sunucu ${PORT} portunda çalışıyor`);
+  console.log(`Bildirim sunucusu ${PORT} portunda çalışıyor`);
 }); 

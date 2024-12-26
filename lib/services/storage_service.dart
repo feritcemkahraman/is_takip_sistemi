@@ -1,7 +1,8 @@
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path/path.dart' as path;
-import 'package:flutter/foundation.dart'; 
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 
 class StorageService extends ChangeNotifier { 
   final FirebaseStorage _storage;
@@ -57,6 +58,33 @@ class StorageService extends ChangeNotifier {
     } catch (e) {
       print('Dosya yükleme hatası (StorageService): $e');
       rethrow;
+    }
+  }
+
+  Future<String> saveFile(File file, String fileName) async {
+    try {
+      // Uygulama belgelerinin bulunduğu dizini al
+      final appDir = await getApplicationDocumentsDirectory();
+      final mediaDir = Directory('${appDir.path}/media');
+      
+      // Media dizini yoksa oluştur
+      if (!await mediaDir.exists()) {
+        await mediaDir.create(recursive: true);
+      }
+
+      // Benzersiz dosya adı oluştur
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final uniqueFileName = '${timestamp}_$fileName';
+      final targetPath = path.join(mediaDir.path, uniqueFileName);
+
+      // Dosyayı kopyala
+      await file.copy(targetPath);
+      print('Dosya kaydedildi: $targetPath');
+      
+      return targetPath;
+    } catch (e) {
+      print('Dosya kaydetme hatası: $e');
+      throw Exception('Dosya kaydedilemedi: $e');
     }
   }
 }

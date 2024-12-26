@@ -186,19 +186,19 @@ class ChatService extends ChangeNotifier {
       if (participantId != currentUser.id) {
         final otherUser = await _userService.getUserById(participantId);
         if (otherUser?.fcmToken != null) {
-          final notificationService = NotificationService();
-          await notificationService.sendNotification(
-            token: otherUser!.fcmToken!,
-            title: chatData['isGroup'] == true 
-                ? '${chatData['name']}: ${currentUser.name}\'den yeni mesaj'
-                : '${currentUser.name}\'den yeni mesaj',
-            body: type == MessageModel.typeText ? content : 'Dosya gönderildi',
-            data: {
-              'type': 'message',
-              'chatId': chatId,
-              'senderId': currentUser.id,
-            },
-          );
+          try {
+            final notificationService = Provider.of<NotificationService>(navigatorKey.currentContext!, listen: false);
+            await notificationService.sendChatNotification(
+              token: otherUser!.fcmToken!,
+              sender: chatData['isGroup'] == true ? '${chatData['name']}: ${currentUser.name}' : currentUser.name,
+              message: content,
+              chatId: chatId,
+              messageType: type,
+            );
+          } catch (e) {
+            debugPrint('Bildirim gönderme hatası (kritik değil): $e');
+            // Bildirim gönderilemese bile mesaj gönderme işlemi başarılı sayılır
+          }
         }
       }
     }

@@ -1,40 +1,53 @@
 import 'package:flutter/material.dart';
-import '../models/task_model.dart';
-import '../models/user_model.dart';
-import '../services/user_service.dart';
-import '../screens/tasks/task_detail_screen.dart';
-import 'package:provider/provider.dart';
+import '../models/task.dart';
+import 'package:intl/intl.dart';
 
 class TaskCard extends StatelessWidget {
-  final TaskModel task;
-  final bool showAssignee;
-  final VoidCallback onStatusChanged;
+  final Task task;
+  final VoidCallback onDelete;
+  final VoidCallback onTap;
 
   const TaskCard({
-    Key? key,
+    super.key,
     required this.task,
-    this.showAssignee = true,
-    required this.onStatusChanged,
-  }) : super(key: key);
+    required this.onDelete,
+    required this.onTap,
+  });
+
+  Color _getPriorityColor() {
+    switch (task.priority.toLowerCase()) {
+      case 'yüksek':
+        return Colors.red;
+      case 'orta':
+        return Colors.orange;
+      case 'düşük':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Color _getStatusColor() {
+    switch (task.status.toLowerCase()) {
+      case 'tamamlandı':
+        return Colors.green;
+      case 'devam ediyor':
+        return Colors.blue;
+      case 'beklemede':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.symmetric(vertical: 4),
       child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => TaskDetailScreen(
-                task: task,
-                canInteract: true,
-              ),
-            ),
-          ).then((_) => onStatusChanged());
-        },
+        onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -44,120 +57,131 @@ class TaskCard extends StatelessWidget {
                     child: Text(
                       task.title,
                       style: const TextStyle(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                  if (task.priority > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _getPriorityColor(task.priority),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        _getPriorityText(task.priority),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: onDelete,
+                    color: Colors.red,
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
-              Text(task.description),
-              const SizedBox(height: 8),
-              if (showAssignee)
-                FutureBuilder<UserModel?>(
-                  future: context.read<UserService>().getUserById(task.assignedTo),
-                  builder: (context, snapshot) {
-                    final user = snapshot.data;
-                    return Text(
-                      'Atanan: ${user?.name ?? 'Yükleniyor...'}',
-                      style: const TextStyle(
-                        color: Colors.grey,
-                      ),
-                    );
-                  },
+              Text(
+                task.description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.grey[600],
                 ),
-              const SizedBox(height: 8),
+              ),
+              const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _getStatusColor(task.status),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _getStatusText(task.status),
-                      style: const TextStyle(color: Colors.white),
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getPriorityColor().withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _getPriorityColor(),
+                          ),
+                        ),
+                        child: Text(
+                          task.priority,
+                          style: TextStyle(
+                            color: _getPriorityColor(),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor().withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _getStatusColor(),
+                          ),
+                        ),
+                        child: Text(
+                          task.status,
+                          style: TextStyle(
+                            color: _getStatusColor(),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   Text(
-                    'Bitiş: ${task.deadline.day}/${task.deadline.month}/${task.deadline.year}',
+                    DateFormat('dd.MM.yyyy').format(task.dueDate),
                     style: TextStyle(
-                      color: task.deadline.isBefore(DateTime.now())
+                      color: task.dueDate.isBefore(DateTime.now())
                           ? Colors.red
-                          : Colors.grey,
+                          : Colors.grey[600],
+                      fontSize: 12,
                     ),
                   ),
                 ],
               ),
+              if (task.attachments.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.attach_file,
+                      size: 16,
+                      color: Colors.grey[600],
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${task.attachments.length} ek',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              if (task.comments.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.comment_outlined,
+                      size: 16,
+                      color: Colors.grey[600],
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${task.comments.length} yorum',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
       ),
     );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'completed':
-        return Colors.green;
-      case 'active':
-        return Colors.blue;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String _getStatusText(String status) {
-    switch (status) {
-      case 'completed':
-        return 'Tamamlandı';
-      case 'active':
-        return 'Aktif';
-      default:
-        return 'Beklemede';
-    }
-  }
-
-  Color _getPriorityColor(int priority) {
-    switch (priority) {
-      case 3:
-        return Colors.red;
-      case 2:
-        return Colors.orange;
-      default:
-        return Colors.blue;
-    }
-  }
-
-  String _getPriorityText(int priority) {
-    switch (priority) {
-      case 3:
-        return 'Yüksek';
-      case 2:
-        return 'Orta';
-      default:
-        return 'Düşük';
-    }
   }
 }

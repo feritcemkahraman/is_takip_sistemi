@@ -1,113 +1,134 @@
-import 'dart:convert';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:http/http.dart' as http;
-import '../services/user_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/material.dart';
 
 class NotificationService {
-  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
-  final String _serverUrl = 'https://is-takip-notification.onrender.com';
-  final UserService? userService;
+  static final FlutterLocalNotificationsPlugin _notifications = FlutterLocalNotificationsPlugin();
+  static bool _isInitialized = false;
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-  NotificationService({this.userService}) {
-    _initNotifications();
-  }
+  static Future<void> init() async {
+    if (_isInitialized) return;
 
-  Future<void> initialize() async {
-    await _initNotifications();
-  }
-
-  Future<bool> checkNotificationPermission() async {
-    final settings = await _firebaseMessaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
     );
-    
-    print('Bildirim izin durumu: ${settings.authorizationStatus}');
-    
-    switch (settings.authorizationStatus) {
-      case AuthorizationStatus.authorized:
-        print('Bildirim izinleri verildi');
-        return true;
-      case AuthorizationStatus.provisional:
-        print('Geçici bildirim izni verildi');
-        return true;
-      case AuthorizationStatus.denied:
-        print('Bildirim izinleri reddedildi');
-        return false;
-      default:
-        print('Bilinmeyen bildirim izin durumu');
-        return false;
+
+    const settings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+
+    await _notifications.initialize(
+      settings,
+      onDidReceiveNotificationResponse: _onNotificationTap,
+    );
+
+    _isInitialized = true;
+  }
+
+  static void _onNotificationTap(NotificationResponse response) {
+    if (response.payload != null) {
+      final payloadData = response.payload!.split(':');
+      if (payloadData.length == 2) {
+        final type = payloadData[0];
+        final id = payloadData[1];
+
+        switch (type) {
+          case 'task':
+            navigatorKey.currentState?.pushNamed('/task-details', arguments: id);
+            break;
+          case 'message':
+            navigatorKey.currentState?.pushNamed('/chat', arguments: id);
+            break;
+        }
+      }
     }
   }
 
-  Future<void> _initNotifications() async {
-    final hasPermission = await checkNotificationPermission();
-    if (!hasPermission) {
-      print('Bildirim izinleri alınamadı');
-      return;
-    }
-
-    // FCM token'ı al
-    final token = await _firebaseMessaging.getToken();
-    print('FCM Token: $token');
-
-    // Ön plandaki mesajları dinle
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      print('Ön planda mesaj alındı:');
-      print('Başlık: ${message.notification?.title}');
-      print('İçerik: ${message.notification?.body}');
-      print('Data: ${message.data}');
-    });
-
-    // Arka plandaki mesajları dinle
-    FirebaseMessaging.onBackgroundMessage(_handleBackgroundMessage);
-  }
-
-  static Future<void> _handleBackgroundMessage(RemoteMessage message) async {
-    print('Arka planda mesaj alındı:');
-    print('Başlık: ${message.notification?.title}');
-    print('İçerik: ${message.notification?.body}');
-    print('Data: ${message.data}');
-  }
-
-  Future<void> sendNotification({
-    required String token,
+  static Future<void> showTaskNotification({
     required String title,
     required String body,
-    Map<String, dynamic>? data,
+    String? taskId,
   }) async {
-    try {
-      print('Bildirim gönderiliyor - Token: $token, Başlık: $title');
-      
-      final response = await http.post(
-        Uri.parse('$_serverUrl/send-notification'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'token': token,
-          'title': title,
-          'body': body,
-          'data': data,
-        }),
-      );
+    const androidDetails = AndroidNotificationDetails(
+      'tasks_channel',
+      'Görev Bildirimleri',
+      channelDescription: 'Görevlerle ilgili bildirimler',
+      importance: Importance.high,
+      priority: Priority.high,
+      enableVibration: true,
+      playSound: true,
+      sound: RawResourceAndroidNotificationSound('notification'),
+      vibrationPattern: Int64List.fromList([0, 1000, 500, 1000]),
+    );
 
-      if (response.statusCode == 200) {
-        print('Bildirim başarıyla gönderildi');
-        final responseData = jsonDecode(response.body);
-        print('Sunucu yanıtı: $responseData');
-      } else {
-        print('Bildirim gönderme hatası - Status: ${response.statusCode}');
-        print('Hata detayı: ${response.body}');
-        throw Exception('Bildirim gönderilemedi (${response.statusCode}): ${response.body}');
-      }
-    } catch (e) {
-      print('Bildirim gönderme hatası: $e');
-      if (e is http.ClientException) {
-        print('Ağ hatası: ${e.message}');
-        throw Exception('Sunucuya bağlanılamadı: ${e.message}');
-      } else {
-        rethrow;
-      }
-    }
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      sound: 'notification.aiff',
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _notifications.show(
+      DateTime.now().millisecondsSinceEpoch.remainder(100000),
+      title,
+      body,
+      details,
+      payload: taskId != null ? 'task:$taskId' : null,
+    );
+  }
+
+  static Future<void> showMessageNotification({
+    required String title,
+    required String body,
+    String? messageId,
+  }) async {
+    const androidDetails = AndroidNotificationDetails(
+      'messages_channel',
+      'Mesaj Bildirimleri',
+      channelDescription: 'Mesajlarla ilgili bildirimler',
+      importance: Importance.high,
+      priority: Priority.high,
+      enableVibration: true,
+      playSound: true,
+      sound: RawResourceAndroidNotificationSound('message'),
+      vibrationPattern: Int64List.fromList([0, 500, 200, 500]),
+    );
+
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+      sound: 'message.aiff',
+    );
+
+    const details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _notifications.show(
+      DateTime.now().millisecondsSinceEpoch.remainder(100000),
+      title,
+      body,
+      details,
+      payload: messageId != null ? 'message:$messageId' : null,
+    );
+  }
+
+  static Future<void> cancelAll() async {
+    await _notifications.cancelAll();
+  }
+
+  static Future<void> cancel(int id) async {
+    await _notifications.cancel(id);
   }
 }
