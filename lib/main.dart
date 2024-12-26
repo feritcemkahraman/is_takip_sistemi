@@ -7,7 +7,8 @@ import 'services/notification_service.dart';
 import 'services/socket_service.dart';
 import 'pages/login_page.dart';
 import 'pages/register_page.dart';
-import 'pages/home_page.dart';
+import 'pages/admin_dashboard_page.dart';
+import 'pages/employee_dashboard_page.dart';
 import 'pages/task_details_page.dart';
 import 'pages/chat_page.dart';
 
@@ -40,7 +41,8 @@ class MyApp extends StatelessWidget {
         '/': (context) => const AuthWrapper(),
         '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterPage(),
-        '/home': (context) => const HomePage(),
+        '/admin-dashboard': (context) => const AdminDashboardPage(),
+        '/employee-dashboard': (context) => const EmployeeDashboardPage(),
         '/task-details': (context) => TaskDetailsPage(
           taskId: ModalRoute.of(context)?.settings.arguments as String,
         ),
@@ -70,14 +72,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token');
     final userId = prefs.getString('userId');
+    final userRole = prefs.getString('userRole');
     
     if (token != null && userId != null) {
       // Socket.IO bağlantısını başlat
       SocketService.init(userId);
       
-      // Ana sayfaya yönlendir
+      // Kullanıcı rolüne göre yönlendir
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        if (userRole == 'admin') {
+          Navigator.of(context).pushReplacementNamed('/admin-dashboard');
+        } else {
+          Navigator.of(context).pushReplacementNamed('/employee-dashboard');
+        }
       }
     } else {
       // Giriş sayfasına yönlendir

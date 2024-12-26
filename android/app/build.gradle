@@ -77,6 +77,12 @@ android {
         disable 'InvalidPackage'
         checkReleaseBuilds false
     }
+
+    configurations.all {
+        resolutionStrategy {
+            force 'androidx.core:core:1.9.0'
+        }
+    }
 }
 
 flutter {
@@ -90,4 +96,5 @@ dependencies {
     implementation 'com.android.support:multidex:1.0.3'
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
     implementation 'androidx.multidex:multidex:2.0.1'
+    implementation 'androidx.core:core:1.9.0'
 }
